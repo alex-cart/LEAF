@@ -1,16 +1,19 @@
-# This is a sample Python script.
-
-# Press Shift+F10 to execute it or replace it with your code.
-# Press Double Shift to search everywhere for classes, files, tool windows, actions, and settings.
-
-
-def print_hi(name):
-    # Use a breakpoint in the code line below to debug your script.
-    print(f'Hi, {name}')  # Press Ctrl+F8 to toggle the breakpoint.
+from plugins.create_environment import main as create_env
+from plugins.copy_files import main as copy_files
+import os
 
 
-# Press the green button in the gutter to run the script.
-if __name__ == '__main__':
-    print_hi('PyCharm')
+if (os.getuid() != 0):
+    print("Error: Root access not detected. Exiting...")
+    exit()
 
-# See PyCharm help at https://www.jetbrains.com/help/pycharm/
+params_key = ["targets_file", "output_directory", "IMG_name", "raw",
+              "script_path", "user_list", "evidence_directory"]
+params_val = create_env()
+parameters = dict(zip(params_key, params_val))
+
+for param in parameters:
+    print(param, ":", parameters[param])
+
+print()
+copy_files(parameters["targets_file"], parameters["evidence_directory"])
