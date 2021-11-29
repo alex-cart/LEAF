@@ -2,6 +2,31 @@ import os
 import subprocess
 import hashlib
 
+"""
+Coming soon.... categories of targets listed with #'s. 
+ - Lines that start with "#" will be handled as a category until the next # 
+ or  end of file, and lines within that range will be interpreted as a category.
+ - Add categories to create_environment.py
+ - When categories are listed in create_environment, search the  
+ target_locations for that category header. When found, run only the 
+ acquisition on those files. 
+
+Example:
+    ./LEAF/main.py -c network,users,logs,internet
+
+Coming next... handling user-input files
+ - If a user inputs a file, it will not undergo any categorization unless 
+ specified (perhaps --ix for input-extreme)
+ - If a user inputs his or her own files, additional categories will still 
+ be a possibility to insert.
+
+Examples:
+    ./LEAF/main.py -i my_file.txt -c network,users,logs,internet
+        # Will do LEAF built-in categories in addition to their file
+    ./LEAF/main.py --ix my_file.txt --cx network,users,logs,internet
+        # Will do the user's file's categories if it is categorized correctly
+    ./LEAF/main.py --ix my_file.txt --cx network,users -c network,installation
+"""
 
 def checkIntegrity(s_file, d_file):
     print(s_file, d_file)
@@ -43,7 +68,6 @@ def statAndCopy(in_item, out_dir, part):
 
 
 def main(target_file, evidence_dir, leaf_paths):
-    #host_users = os.listdir("/home")
     with open(target_file) as f:
         targets = f.readlines()
     for line in targets:
