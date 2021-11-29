@@ -1,10 +1,8 @@
-#!/usr/bin/python
-
 import argparse
 import os
 from datetime import datetime
-import platform
-import pycdlib
+
+
 
 # Get input location -- temporary (later changed to inputs from a list)
 # Get output location
@@ -121,7 +119,7 @@ def main():
         description='Get input and output locations.')
     script_name = __file__.split("/")[-1]
 
-    script_path = "/".join(os.path.realpath(__file__).split('/')[:-2])
+    script_path = "/".join(os.path.realpath(__file__).split('/')[:-2]) + "/"
 
     parser.add_argument('-i', "--input", nargs='?', const=1, type=str,
                         default=str(script_path + "/target_locations"),

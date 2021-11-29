@@ -2,17 +2,7 @@ import os
 import shutil
 import subprocess
 
-print("Subprocess")
-#x = os.system("ipconfig")
-x = subprocess.check_output("debugfs -R 'copy_inode <1048700> <1048748>' "
-                            "/dev/sda2", shell=True)
-print("Subprocess2")
-print(x)
-print("System")
-x = os.system("debugfs -R 'copy_inode <1048700> <1048748>' /dev/sda2")
-print("System2")
-print(x)
-
+print(os.path.abspath(__file__))
 
 '''in_dir = "/home/user1/Desktop/aaa/two/"
 in_file = "twotwo.txt"

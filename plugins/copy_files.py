@@ -2,6 +2,7 @@ import os
 import subprocess
 import hashlib
 
+
 def checkIntegrity(s_file, d_file):
     print(s_file, d_file)
     # hash each file, is the hash the same?
@@ -12,7 +13,6 @@ def checkIntegrity(s_file, d_file):
             buf = f.read()
             sha1.update(buf)
         hashes.append(sha1.hexdigest())
-    print("HASHES" , hashes)
     if hashes[0] != hashes[1]:
         return False
     return True
@@ -38,11 +38,12 @@ def statAndCopy(in_item, out_dir, part):
     os.system(debug_cmd)
     if os.path.isfile(in_item):
         if not checkIntegrity(in_item, f"{out_dir}{in_item[1:]}"):
-            print(f"ERROR: Error copying {in_item}")
+            print(f"ERROR: Error copying {in_item}, wrong hash")
     print()
 
 
-def main(target_file, evidence_dir):
+def main(target_file, evidence_dir, leaf_paths):
+    #host_users = os.listdir("/home")
     with open(target_file) as f:
         targets = f.readlines()
     for line in targets:
@@ -50,11 +51,15 @@ def main(target_file, evidence_dir):
         line = line[:-1]
         if not os.path.exists(line):
             print(line, "does not exist.")
+        elif line in leaf_paths[0] or line in leaf_paths[1] or line in \
+                leaf_paths[2]:
+            print("Error: LEAF data path listed in target locations. "
+                  "Continuing...")
         else:
-            print(line, "exists.")
             part = subprocess.check_output(f"df -T {line}",shell=True) \
                     .decode('utf-8').split("\n")[1].split(" ")[0]
             statAndCopy(line, evidence_dir, part)
+    print("\n\n")
 
 
 
