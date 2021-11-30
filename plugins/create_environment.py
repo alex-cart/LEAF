@@ -9,16 +9,14 @@ from datetime import datetime
 # Get output image type
 
 
-def getOutputDir(output_dir):
+def createOutputDir(output_dir):
     """
-    Formats the output location as a directory and creates it if necessary
+    Format the output location as a directory and creates it if necessary
     :param output_dir: (str) directory that the output will be saved to
     :return: updated directory output location
     """
-
-    # If that directory does not exist, create it
     print("\nCreating" , output_dir + "....")
-
+    # If that directory does not exist, create it
     if not os.path.exists(output_dir):
         os.makedirs(output_dir)
     else:
@@ -115,23 +113,31 @@ def writeTargets(output_dir, targets, users):
 
 
 def main():
+    """
+    Main handler for interpreting user input information creating the forensic
+    environment for output items.
+    :return: user parameters
+    """
+    # Creates argparse parser
     parser = argparse.ArgumentParser(
         description='Get input and output locations.')
-    script_name = __file__.split("/")[-1]
 
+    # Gets the real path of the script. If the script is run from a symlink,
+    # this will output the source of the symlink
     script_path = "/".join(os.path.realpath(__file__).split('/')[:-2]) + "/"
 
+    # Add arguments to parser
     parser.add_argument('-i', "--input", nargs='?', const=1, type=str,
                         default=str(script_path + "/target_locations"),
-                        help = str("Additional Input locations. Separate "+
-                                    "multiple input files with \",\". "+
+                        help=str("Additional Input locations. Separate " +
+                                    "multiple input files with \",\". " +
                                     "Default: " + script_path +
-                                   "/target_location."))
+                                   "target_locations."))
 
     parser.add_argument('-o', "--output", type=str,
                         default=str(os.getcwd() + "/LEAF_output/"),
                         help='Output directory location')
-
+    # Deprecated
     """parser.add_argument('-t', "--type", default="ISO", nargs=1,
                         help='Output file type. '
                              'Options: '
@@ -144,23 +150,35 @@ def main():
 
     parser.add_argument('-s', "--save", help='Save the raw evidence directory',
                         action='store_true')
+    # Compile the arguments
     args = parser.parse_args()
 
+    # Stores the arguments into static variables
     input_file = args.input
     output_dir = args.output
-    # img_type = args.type
     sve = args.save
+    # Deprecated
+    # img_type = args.type
 
+    # Formats the "output_dir" variable to have a trailing "/"
+    # If the output directory is not listed from root, create the full path
     if output_dir[0] != "/":
         output_dir = os.getcwd() + "/" + output_dir
     if output_dir[-1] != "/":
         output_dir = output_dir + "/"
-    out_dir = getOutputDir(output_dir)
+    out_dir = createOutputDir(output_dir)
 
     if args.users != os.listdir("/home/"):
         user_list = args.users[0].split(",")
     else:
         user_list = args.users
+
+    for user in user_list:
+        if user not in os.listdir("/home/"):
+            print(f"Unknown user, {user}. Removing...")
+            user_list.remove(user)
+
+
 
     targets_params, input_files = readInputFile(input_file, out_dir,
                                           script_path, user_list)
@@ -178,8 +196,5 @@ def main():
     print("\tUser(s):\t\t",user_list)
     print()
 
-
     return (targets_file, out_dir, img_name, sve, script_path, user_list,
             evdc_dir)
-
-

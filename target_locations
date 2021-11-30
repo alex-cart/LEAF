@@ -1,7 +1,10 @@
+# NETWORK
 /home/$USER/Desktop/aaa/ccc/fff.txt
 /home/$USER/Desktop/aaa/bbb/
 /home/$USER/Desktop/aaa/ccc/
+# USERS
 /home/$USER/Desktop/aaa/bbb/nonexistent.txt
 /home/user1/Desktop/LEAF-2/
+# APPLICATIONS
 /mnt/hgfs/LEAF-2/
 /home/user1/Desktop/LEAF_output/
