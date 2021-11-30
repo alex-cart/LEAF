@@ -1,4 +1,5 @@
 import argparse
+from argparse import RawTextHelpFormatter
 import os
 from datetime import datetime
 
@@ -59,34 +60,42 @@ def createEvdc(output_dir): #, output_type):
 
 
         
-def readInputFile(in_file, output_dir, script_path, users):
+def readInputFile(in_file, cats, output_dir, script_path, users):
     with open(output_dir + "temp_file", "w+") as ftemp:
         data = ftemp.read()
     if in_file != str(script_path + "/target_locations"):
         input_files = in_file.split(",")
-
+        input_files_paths = []
         for file in input_files:
-            with open(file) as nextfile:
-                data = data + nextfile.read()
-
+            if os.path.exists(file):
+                if file[0] != "/":
+                    input_files_paths.append(f"{os.getcwd()}/{file}")
+                else:
+                    input_files_paths.append(file)
+            else:
+                print(f"Unable to find {file}. Continuing...")
+                continue
+        for file in input_files_paths:
+                with open(file) as nextfile:
+                    data = data + nextfile.read()
         with open(str(output_dir + "temp_file"), "w") as f:
             f.write(data)
 
         in_file = str(output_dir + "temp_file")
     else:
-        input_files = in_file
+        input_files_paths = in_file
 
     f = open(in_file, "r")
     targets = []
     for line in f:
         targets.append(line)
 
-    targets = writeTargets(output_dir, targets, users)
+    targets = writeTargets(output_dir, cats, targets, users)
     os.remove(str(output_dir + "temp_file"))
-    return targets, input_files
+    return targets, input_files_paths
 
 
-def writeTargets(output_dir, targets, users):
+def writeTargets(output_dir, cats, targets, users):
     temp_outfile = str(output_dir + "target_locations")
     if not os.path.exists(temp_outfile):
         i = ""
@@ -99,18 +108,27 @@ def writeTargets(output_dir, targets, users):
     print("Creating target file,", new_targetfile + "...")
     f = open(new_targetfile, "w")
     new_targets = []
+    header_found = False
     for user in users:
         for target in targets:
-            if target[0] != "#" and target != "":
-                if "$USER" in target:
-                    new_targets.append(target.replace("$USER", user))
+            if target[0] == "#":
+                current_cat = target.split(' ')[-1][:-1]
+                if target.split(" ")[1] != "END":
+                    if current_cat in cats:
+                        header_found = True
+                else:
+                    header_found = False
+            elif target != "":
+                if header_found:
+                    if "$USER" in target:
+                        new_targets.append(target.replace("$USER", user)[:-1])
+
+                    else:
+                        if target not in new_targets:
+                            new_targets.append(target[:-1])
                     f.write(target.replace("$USER", user))
-                elif target not in new_targets:
-                    new_targets.append(target)
-                    f.write(target)
     f.close()
     return new_targets, new_targetfile
-
 
 def main():
     """
@@ -128,7 +146,7 @@ def main():
 
     # Add arguments to parser
     parser.add_argument('-i', "--input", nargs='?', const=1, type=str,
-                        default=str(script_path + "/target_locations"),
+                        default=str(script_path + "target_locations"),
                         help=str("Additional Input locations. Separate " +
                                     "multiple input files with \",\". " +
                                     "Default: " + script_path +
@@ -146,7 +164,22 @@ def main():
     parser.add_argument('-u', "--users", nargs=1, type=str,
                         default=os.listdir("/home"), help='Users to include '
                                 'in output, separated by \",\" (i.e. alice,'
-                                'bob,charlie). MUST be in /home/ directory')
+                                'bob,charlie). \nMUST be in /home/ directory')
+
+    parser.add_argument('-c', "--categories", nargs=1, type=str,
+                        default="all",
+                            help='Explicit artifact categories to include  '
+                                 'during acquisition. Categories must be '
+                                 'separated by comma, \",\" (i.e. network,'
+                                 'users,application). Full List of '
+                                 'categories includes: [all, applications, '
+                                 'executions, logs, misc, network, '
+                                 'services, users]. Categories are '
+                                 'compatible with user-inputted files as '
+                                 'long as they follow the notation "# '
+                                 'CATEGORY<br>/location1<br>/location2<br>'
+                                 '.../locationn</br># END CATEGORY", '
+                                 'where <br> means linebreak. Default: all')
 
     parser.add_argument('-s', "--save", help='Save the raw evidence directory',
                         action='store_true')
@@ -175,16 +208,25 @@ def main():
 
     for user in user_list:
         if user not in os.listdir("/home/"):
-            print(f"Unknown user, {user}. Removing...")
+            print(f"Non-existent user, {user}. Removing...")
             user_list.remove(user)
+    all_cats = ["APPLICATIONS", "EXECUTIONS", "LOGS", "MISC", "NETWORK",
+                "SERVICES", "USERS"]
+    if "ALL" not in str(args.categories).upper():
+        cats = args.categories[0].upper().split(",")
+        nonexist = list(set(cats) - set(all_cats))
+        for item in nonexist:
+            print(f"{item} is not a valid category. Removing...")
+            cats.remove(item)
+    else:
+        cats = all_cats
 
-
-
-    targets_params, input_files = readInputFile(input_file, out_dir,
+    targets_params, input_files = readInputFile(input_file, cats, out_dir,
                                           script_path, user_list)
+
     targets, targets_file = targets_params
 
-    evdc_dir, img_name = createEvdc(output_dir) # , img_type)
+    evdc_dir, img_name = createEvdc(output_dir)
 
 
     print("Arguments: ")
@@ -194,7 +236,8 @@ def main():
     print("\tSave raw?\t\t" , sve)
     print("\tScript Path:\t\t",script_path)
     print("\tUser(s):\t\t",user_list)
+    print("\tCategories:\t\t",cats)
     print()
 
-    return (targets_file, out_dir, img_name, sve, script_path, user_list,
+    return (targets_file, cats, out_dir, img_name, sve, script_path, user_list,
             evdc_dir)

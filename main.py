@@ -19,8 +19,9 @@ if __name__ == "__main__":
         exit()
     start_time = datetime.datetime.now()
 
-    params_key = ["targets_file", "output_directory", "img_path", "raw",
-                  "script_path", "user_list", "evidence_directory"]
+    params_key = ["targets_file", "categories", "output_directory",
+                  "img_path", "raw", "script_path", "user_list",
+                  "evidence_directory"]
     params_val = create_env()
     parameters = dict(zip(params_key, params_val))
 

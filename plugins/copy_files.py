@@ -70,7 +70,7 @@ def debugfs(src, tgt, part):
     new_inode = subprocess.check_output(f"stat -c %i {tgt}",
                                         shell=True).decode("utf-8")[:-1]
     # Copy the inode data associated with the source file to the copied file
-    debug_cmd = f"debugfs -R \"copy_inode <{orig_inode}> <{new_inode}>\"" \
+    debug_cmd = f"debugfs -wR \"copy_inode <{orig_inode}> <{new_inode}>\"" \
                 f" {part}"
     os.system(debug_cmd)
 
@@ -123,6 +123,8 @@ def copy_item(src, evdc_dir, part):
             # Each item in the directory will be run through copy_item()
             # recursively with an updated source
             copy_item(src+filename, evdc_dir, part)
+
+
 
 
 def main(target_file, evidence_dir, leaf_paths):

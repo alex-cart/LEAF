@@ -1,10 +1,29 @@
-# NETWORK
-/home/$USER/Desktop/aaa/ccc/fff.txt
-/home/$USER/Desktop/aaa/bbb/
-/home/$USER/Desktop/aaa/ccc/
-# USERS
-/home/$USER/Desktop/aaa/bbb/nonexistent.txt
-/home/user1/Desktop/LEAF-2/
 # APPLICATIONS
-/mnt/hgfs/LEAF-2/
-/home/user1/Desktop/LEAF_output/
+/home/$USER/Desktop/sample_artifacts/apps/appdata
+/home/$USER/Desktop/sample_artifacts/apps/installed_applications/install_list.txt
+# END APPLICATIONS
+# EXECUTIONS
+/home/$USER/Desktop/sample_artifacts/executions/bash_history/
+/home/$USER/Desktop/sample_artifacts/executions/bash_history/run_commands
+/home/$USER/Desktop/sample_artifacts/executions/recent_exec/
+/home/$USER/Desktop/sample_artifacts/runs/
+# END EXECUTIONS
+# LOGS
+/home/$USER/Desktop/sample_artifacts/logs/access/
+/home/$USER/Desktop/sample_artifacts/logs/var/log/alog.txt
+/home/$USER/Desktop/sample_artifacts/logs/var/log/apache2
+# END LOGS
+# MISC
+/home/$USER/Desktop/sample_artifacts/misc/
+# END MISC
+# NETWORK
+/home/$USER/Desktop/sample_artifacts/networking/dhcp_info/
+/home/$USER/Desktop/sample_artifacts/networking/routing_info/
+# END NETWORK
+# SERVICES
+/home/$USER/Desktop/sample_artifacts/services/
+# END SERVICES
+# USERS
+/home/$USER/Desktop/sample_artifacts/users/etc/
+/home/$USER/Desktop/sample_artifacts/users/groups/etc/
+# END USERS
