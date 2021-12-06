@@ -1,16 +1,12 @@
 import os
 import subprocess
 import hashlib
+from plugins.errorhandling import *
+from tqdm import tqdm
 
 """
-Coming soon.... categories of targets listed with #'s. 
- - Lines that start with "#" will be handled as a category until the next # 
- or  end of file, and lines within that range will be interpreted as a category.
- - Add categories to create_environment.py
- - When categories are listed in create_environment, search the  
- target_locations for that category header. When found, run only the 
- acquisition on those files. 
- - Software-specific logs (Apache, etc.)
+
+ - Software-specific logs (Apache, etc.)?
 
 Example:
     ./LEAF/main.py -c network,users,logs,internet
@@ -24,11 +20,12 @@ Coming next... handling user-input files
 Examples:
     ./LEAF/main.py -i my_file.txt -c network,users,logs,internet
         # Will do LEAF built-in categories in addition to their file
-    ./LEAF/main.py --ix my_file.txt --cx network,users,logs,internet
+    ./LEAF/main.py --ix my_file.txt --cx samba,apache,ssh
         # Will do the user's file's categories if it is categorized correctly
     ./LEAF/main.py --ix my_file.txt --cx network,users -c network,installation
     
 """
+
 
 def checkIntegrity(s_file, d_file):
     """
@@ -41,6 +38,9 @@ def checkIntegrity(s_file, d_file):
     hashes = []
     # Parse each file
     for file in (s_file, d_file):
+        # Do not attempt to hash link files
+        if os.path.islink(s_file):
+            return True
         # Generating the hash for the file
         sha1 = hashlib.sha1()
         with open(file, 'rb') as f:
@@ -55,7 +55,7 @@ def checkIntegrity(s_file, d_file):
     return True
 
 
-def debugfs(src, tgt, part):
+def debugfs(src, tgt, part, v):
     """
     Transfer inode data from source item to destination item on single
     partition.
@@ -63,18 +63,24 @@ def debugfs(src, tgt, part):
     :param tgt: (str)   copied file
     :param part: (str)  partition name
     """
+
     # Get the original item's inode identifier
-    orig_inode = subprocess.check_output(f"stat -c %i {src}",
+    orig_inode = subprocess.check_output(f"stat -c %i '{src}'",
                                          shell=True).decode("utf-8")[:-1]
     # Get the copied item's inode identifier
-    new_inode = subprocess.check_output(f"stat -c %i {tgt}",
+    new_inode = subprocess.check_output(f"stat -c %i '{tgt}'",
                                         shell=True).decode("utf-8")[:-1]
     # Copy the inode data associated with the source file to the copied file
-    debug_cmd = f"debugfs -wR \"copy_inode <{orig_inode}> <{new_inode}>\"" \
-                f" {part}"
+    if v:
+        debug_cmd = f"debugfs -wR \"copy_inode <{orig_inode}> <{new_inode}>\""\
+                    f" {part}"
+    else:
+        debug_cmd = f"debugfs -wR \"copy_inode <{orig_inode}> <{new_inode}>\""\
+                f" {part} > /dev/null 2>&1"
     os.system(debug_cmd)
 
-def copy_item(src, evdc_dir, part):
+
+def copy_item(src, evdc_dir, part, v, l_paths):
     """
     Copy each item from the source to the destination with incorporation
     of debugfs to ensure the secure copy of file (inode) metadata.
@@ -85,26 +91,38 @@ def copy_item(src, evdc_dir, part):
     """
     # The new item to be parsing; this will be the target location
     new_root = evdc_dir+src[1:]
+
     # Ensure that the evidence directory has a trailing "/"
     if evdc_dir[-1] != "/":
         evdc_dir = evdc_dir + "/"
 
+    if any(l_path in src for l_path in l_paths):
+        verbose(f"Skipping {src}: LEAF in Path", v)
+        return
+
+    verbose(f"CLONING {src}...", v)
+
     if os.path.isfile(src):
         # If the source is a file, copy it to the latest target location
-        copy = f"mkdir --parents {evdc_dir}{'/'.join(src.split('/')[:-1])}"
-        os.system(copy)
-        copy = f"cp -p {src} {new_root}"
+        copy = f"mkdir --parents '{evdc_dir}{'/'.join(src.split('/')[:-1])}'"
         os.system(copy)
 
-        if not checkIntegrity(src, new_root):
-            print(f"ERROR: Error copying {src}, wrong hash")
+        copy = f"cp -p '{src}' '{new_root}'"
+        os.system(copy)
+
+        try:
+            if not checkIntegrity(src, new_root):
+                raise NonMatchingHashes(src, new_root)
+        except NonMatchingHashes as e:
+            print("Error:" , e)
 
         # Use debugfs to copy each file's inode data over
-        debugfs(src, new_root, part)
+        debugfs(src, new_root, part, v)
 
         # return to previous recursive statement
         return
-    else:
+
+    elif os.path.isdir(src):
         # Otherwise, if the source is a directory, make sure it has a
         # trailing "/"...
         if src[-1] != "/":
@@ -113,56 +131,63 @@ def copy_item(src, evdc_dir, part):
         # Copy the entire file structure to the target location. --parent
         # ensures that the entire hierarchy is copied, not just the final
         # directory
-        copy = f"mkdir --parents {new_root}"
+        copy = f"mkdir --parents '{new_root}'"
         os.system(copy)
 
         # Run debugfs to copy the inode data from the source to destination
         # item
-        debugfs(src, new_root, part)
+        debugfs(src, new_root, part, v)
         for filename in os.listdir(src):
             # Each item in the directory will be run through copy_item()
-            # recursively with an updated source
-            copy_item(src+filename, evdc_dir, part)
+            # recursively with an updated source, as long as not in LEAF paths
+            if not any(l_path in str(src+filename) for l_path in l_paths):
+                copy_item(src+filename, evdc_dir, part, v, l_paths)
+    else:
+        if os.path.islink(src):
+            copy = f"cp -P '{src}' '{new_root}'"
+            os.system(copy)
+        else:
+            return
 
 
-
-
-def main(target_file, evidence_dir, leaf_paths):
+def main(target_file, evidence_dir, v, leaf_paths):
     """
     Main handler for the copy file + metadata operations.
     :param target_file: (str)   file of listed targets
     :param evidence_dir: (str)  location of evidence directory
+    :param v: (bool)      Verbose output on or off
     :param leaf_paths: (list)   list of protected locations used by LEAF
     :return:
     """
     # Read all lines of the targets file and save to targets list
     with open(target_file) as f:
         targets = f.readlines()
-    # Parse each line/location
-    for line in targets:
+    # Parse each line/location; uses tqdm to generate a progress bar
+    for i in tqdm(range(len(targets))):
+        line = targets[i]
         # Removes any trailing whitespaces or special characters (i.e. "\n")
         if not line[-1].isalnum():
             line = line[:-1]
 
-        # If the path does not exist, return that it does not exist and
-        # continue
-        if not os.path.exists(line):
-            print(line, "does not exist.")
-        # If the line is in the protected LEAF paths, do not copy and continue
-        elif line in leaf_paths[0] or line in leaf_paths[1] or line in \
-                leaf_paths[2]:
-            print("Error: LEAF data path listed in target locations. "
-                  "Continuing...")
-        # Otherwise, if it is a valid path...
-        else:
-            # Get its partition location
-            part = subprocess.check_output(f"df -T {line}",shell=True) \
-                    .decode('utf-8').split("\n")[1].split(" ")[0]
-            # push the item to copy_item()
-            copy_item(line, evidence_dir, part)
+        # If the path does not exist, raise the DoesNotExist error
+        try:
+            if not os.path.exists(line):
+                raise DoesNotExistError(line)
+
+            # If the line is in protected LEAF paths, raise LEAFinPath Error
+            elif any(l_path in line for l_path in leaf_paths):
+                raise LEAFInPath(line)
+            # Otherwise, if it is a valid path...
+            else:
+                # Get its partition location
+                part = subprocess.check_output(f"df -T '{line}'", shell=True) \
+                        .decode('utf-8').split("\n")[1].split(" ")[0]
+                # push the item to copy_item()
+                if not any(l_path in line for l_path in leaf_paths):
+                    copy_item(line, evidence_dir, part, v, leaf_paths)
+        except DoesNotExistError as e:
+            print("Error:", e, "\nContinuing...")
+        except LEAFInPath as e:
+            print("Error:", e, "\nContinuing...")
+
     print("\n\n")
-
-
-
-
-

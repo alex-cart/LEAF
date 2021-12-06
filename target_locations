@@ -1,29 +1,138 @@
 # APPLICATIONS
-/home/$USER/Desktop/sample_artifacts/apps/appdata
-/home/$USER/Desktop/sample_artifacts/apps/installed_applications/install_list.txt
+/var/log/yum.log
+/var/log/apache2/
+/var/log/Xorg.0.log
+/var/log/httpd/
+/var/log/samba/
+/var/log/mysqld/
+/var/log/pureftp.log
+/var/log/apt/
+/var/lib/dpkg/
+/var/lib/systemd/coredump
+/home/$USER/.config/autostart/
 # END APPLICATIONS
 # EXECUTIONS
-/home/$USER/Desktop/sample_artifacts/executions/bash_history/
-/home/$USER/Desktop/sample_artifacts/executions/bash_history/run_commands
-/home/$USER/Desktop/sample_artifacts/executions/recent_exec/
-/home/$USER/Desktop/sample_artifacts/runs/
+/root/.bash_history
+/home/$USER/.bash_history
+/var/log/auth.log
 # END EXECUTIONS
 # LOGS
-/home/$USER/Desktop/sample_artifacts/logs/access/
-/home/$USER/Desktop/sample_artifacts/logs/var/log/alog.txt
-/home/$USER/Desktop/sample_artifacts/logs/var/log/apache2
+/var/lib/
+/var/log/auth.log
+/var/log/daemon.log
+/var/log/debug
+/var/log/kern.log
+/var/log/syslog
+/var/log/apache2/
+/var/log/Xorg.0.log
+/var/log/faillog
+/var/log/httpd/
+/var/log/samba/
+/var/log/mysqld/
+/var/log/messages
+/var/log/secure
+/var/log/btmp
+/var/log/journal/
 # END LOGS
 # MISC
-/home/$USER/Desktop/sample_artifacts/misc/
+/var/log/syslog
+/boot/grub/
+/boot/grub2/
+/etc/grub.d/
+/etc/default/grub
+/etc/systemd/
+/etc/wireguard/
+/var/spool/anacron/
+/tmp/
+/etc/cups/
+/var/cache/cups/
+/var/spool/cups/
+/var/log/cups/
+/usr/bin/thunderbird/
+/usr/bin/telnet/
 # END MISC
 # NETWORK
-/home/$USER/Desktop/sample_artifacts/networking/dhcp_info/
-/home/$USER/Desktop/sample_artifacts/networking/routing_info/
+/var/lib/NetworkManager/
+/var/lib/bluetooth/
+/usr/lib/systemd/network/
+/lib/systemd/network
+/etc/systemd/network/
+/etc/network/interfaces
+/etc/network/
+/etc/networks
+/etc/resolv.conf
+/etc/hosts
+/etc/nsswitch.conf
 # END NETWORK
 # SERVICES
-/home/$USER/Desktop/sample_artifacts/services/
+/var/log/daemon.log
+/var/spool/cron/crontabs/
+/etc/crontab/
+/var/log/xferlog
+/var/log/pureftp.log
 # END SERVICES
+# STARTUP
+/etc/init.d/
+/etc/rc0.d/
+/etc/rc1.d/
+/etc/rc2.d/
+/etc/rc3.d/
+/etc/rc4.d/
+/etc/rc5.d/
+/etc/rc6.d/
+/etc/rc.local
+/etc/rcS.d/
+/lib/systemd/system/
+/etc/systemd/system/
+# END STARTUP
+# SYSTEM
+/boot/grub/
+/boot/grub2/
+/etc/grub.d/
+/etc/default/grub
+/etc/systemd/
+/etc/lsb-release
+/etc/os-release
+/etc/sysctl.conf
+/etc/sysctl.d
+/etc/modprobe.conf
+/etc/modprobe.d
+/etc/modules
+/etc/modules-load.d
+/etc/modules-load.conf
+/home/$USER/.config/systemd
+/usr/lib/systemd/
+/var/log/journal/
+/var/log/syslog
+# END SYSTEM
+# TRASH
+/home/$USER/.local/share/Trash
+# END TRASH
 # USERS
-/home/$USER/Desktop/sample_artifacts/users/etc/
-/home/$USER/Desktop/sample_artifacts/users/groups/etc/
+/home/$USER/
+/home/$USER/.bash_history
+/home/$USER/.config/
+/home/$USER/.config/mimeapps.list
+/home/$USER/.bashrc/
+/home/$USER/.bash_logout/
+/home/$USER/.local/share
+/home/$USER/.cache
+/home/$USER/.recently-used
+/home/$USER/.cache/thumbnails
+/home/$USER/.local/share/Trash
+/home/$USER/.local/share/recently-used.xbel
+/home/$USER/.Trash
+/home/$USER/.mozilla/firefox
+/home/$USER/.local/share/zeitgeist
+/var/log/auth.log
+/var/log/faillog
+/var/log/lastlog
+/var/log/wtmp
+/var/log/secure
+/var/log/btmp
+/var/log/utmp
+/var/log/wtmp
+/etc/group
+/etc/passwd
+/etc/shadow
 # END USERS

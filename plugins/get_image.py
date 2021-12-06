@@ -1,9 +1,9 @@
 import os
 import hashlib
+import shutil
+from plugins.errorhandling import *
 
-"""
-Coming soon... testing the differences between pycdlib and mkisofs, getisogen
-"""
+
 def getHash(iso_file):
     """
     Check Integrity of the copied file against the original file.
@@ -17,20 +17,19 @@ def getHash(iso_file):
     with open(iso_file, 'rb') as f:
         buf = f.read()
         sha1.update(buf)
-    # Otherwise, if hashes match, return true
     return sha1.hexdigest()
 
+
 def acquire(target_dir, out_dir, img_path):
-    print(f"Acquiring {target_dir}...")
-    os.system(f"tree {target_dir}")
-    print(f"Writing data to {img_path}")
-    os.system(f"mkisofs -max-iso9660-filenames -U -r -o {img_path} {out_dir}")
+    print(f"Acquiring '{target_dir}'...")
+    os.system(f"tree -a '{target_dir}'")
+    print(f"Writing data to '{img_path}'")
+    os.system(f"mkisofs -max-iso9660-filenames -U -o '{target_dir}' '{out_dir}'")
 
 def main(target_dir, out_dir, img_path, raw):
     acquire(target_dir, out_dir, img_path)
     print("Done!")
     iso_hash = getHash(img_path)
     if not raw:
-        os.rmdir(target_dir)
-
+        shutil.rmtree(target_dir)
     return iso_hash
