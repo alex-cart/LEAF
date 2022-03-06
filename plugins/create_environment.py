@@ -42,12 +42,8 @@ def createOutputDir(output_dir):
 
 def createEvdc(output_dir):
     """
-    Create the outputted image file based on user input
-    Note: during preliminary testing, the input will be a created directory.
-    Once the tool is further developed, the input locations will be pulled
-    from a list-like structure.
+    Prepare the output files and environment based on user input
     :param output_dir: (str) Target location to save evidence to
-    :param output_type: (str) Type/extension of output
     :return:
     """
     # Gets the time of execution to assign to the image name
@@ -56,11 +52,10 @@ def createEvdc(output_dir):
                           str(current_time) + ".ISO")
 
     evidence_dir = str(output_dir + "evidence")
-
+    i = ""
     # If the evidence directory does not exist, create it
     if not os.path.exists(evidence_dir):
         os.makedirs(evidence_dir, mode=775)
-        i = ""
     # Otherwise, if the evidence directory exists, parse all numbers in
     # range 1,255 to create a new directory, <evidence#> to prevent data
     # overwrite
@@ -91,7 +86,7 @@ def main():
         evdc_dir : Evidence Directory (out_dir/evdc_dir)
     """
     # Define all categories
-    all_cats = ["APPLICATIONS", "EXECUTIONS", "LOGS", "MISC", "NETWORK",
+    all_cats = ["ALL", "APPLICATIONS", "EXECUTIONS", "LOGS", "MISC", "NETWORK",
                 "STARTUP", "SERVICES", "SYSTEM", "TRASH", "USERS"]
     # Creates argparse parser
     parser = argparse.ArgumentParser(
@@ -114,22 +109,28 @@ def main():
                     'directory'
                      + bcolors.ENDC),
         epilog="Example Usages:\n\n"
-               "To use default arguments (this will use "
+               "To use default arguments [this will use "
                "default input file (./target_locations), users ("
                "all users), categories (all categories), "
-               "and output location (./LEAF_output/):" +
+               "and output location (./LEAF_output/). Cloned data will not "
+               "be stored in a local directory, verbose mode is off, "
+               "and yara scanning is disabled]:" +
                bcolors.Green + "\n\tLEAF_main.py\n\n" + bcolors.ENDC +
                "All arguments:\n\t" + bcolors.Green +
                "LEAF_main.py -i /home/alice/Desktop/customfile1.txt -o "
                "/home/alice/Desktop/ExampleOutput/ -c logs,startup,"
-               "services -u alice,bob,charlie -s\n" + bcolors.ENDC +
-               "To specify usernames and categories:\n\t" +
+               "services -x apache -u alice,bob,charlie -s -v -y -yr "
+               "/path/to/yara_rules/\n" + bcolors.ENDC +
+               "To specify usernames, categories, and yara files:\n\t" +
                bcolors.Green +
                "LEAF_main.py -u alice,bob,charlie -c applications,"
-               "executions,users" + bcolors.ENDC +
-               "\n\nTo include custom input file(s):\n\t" + bcolors.Green +
+               "executions,users -y /home/alice/Desktop/yara1.yar,"
+               "/home/alice/Desktop/yara2.yar" + bcolors.ENDC +
+               "\nTo include custom input file(s) and categories:\n\t" +
+               bcolors.Green +
                "LEAF_main.py -i /home/alice/Desktop/customfile1.txt,"
-               "/home/alice/Desktop/customfile2.txt\n" + bcolors.ENDC,
+               "/home/alice/Desktop/customfile2.txt -x apache,xampp\n" +
+               bcolors.ENDC,
         formatter_class=RawTextHelpFormatter)
 
     # Gets the real path of the script. If the script is run from a symlink,
@@ -137,13 +138,13 @@ def main():
     script_path = "/".join(os.path.realpath(__file__).split('/')[:-2]) + "/"
 
     # Add arguments to parser
-    parser.add_argument('-i', "--input", nargs=1, type=str,
+    parser.add_argument('-i', "--input", nargs='?', type=str,
             default=str(script_path + "target_locations"),
             help=str("Additional Input locations. Separate " +
                 "multiple input files with \",\"\n" +
                 "Default: " + script_path + "target_locations"))
 
-    parser.add_argument('-o', "--output", type=str,
+    parser.add_argument('-o', "--output", nargs='?', type=str,
             default=str(os.getcwd() + "/LEAF_output/"),
             help='Output directory location\nDefault: '
                     './LEAF_output')
@@ -152,12 +153,19 @@ def main():
                         help='Output file type. '
                              'Options: '
                              'IMG, DD, ISO, VHD')"""
-
-    parser.add_argument('-u', "--users", nargs=1, type=str,
+    try:
+        parser.add_argument('-u', "--users", nargs=1, type=str,
             default=os.listdir("/home"), help='Users to include '
                     'in output, separated by \",\" (i.e. alice,'
                     'bob,charlie). \nMUST be in /home/ '
                     'directory\nDefault: All users')
+    except FileNotFoundError:
+        parser.add_argument('-u', "--users", nargs=1, type=str,
+                            default="",
+                            help='Users to include '
+                                 'in output, separated by \",\" (i.e. alice,'
+                                 'bob,charlie). \nMUST be in /home/ '
+                                 'directory\nDefault: All users')
 
     parser.add_argument('-c', "--categories", nargs=1, type=str,
                         default="all",
@@ -166,12 +174,28 @@ def main():
                                  'separated by comma, \",\" (i.e. network,'
                                  'users,application). \nFull List of '
                                  'categories includes: \n\t' + str(all_cats) +
-                            ' or "all"\n Categories are '
+                                 '\n Categories are '
                                  'compatible with user-inputted files as '
                                  'long as they follow the notation: \n\t# '
                                  'CATEGORY\n\t/location1\n\t/location2\n\t'
                                  '.../location[n]\n\t# END CATEGORY\nDefault: '
                                  '"all"')
+    ### TODO : TEST THIS
+    parser.add_argument('-x', "--add_categories", nargs=1, type=str,
+                        default="",
+                        help='Add custom categories '
+                             'during acquisition. \nCategories must be '
+                             'separated by comma, \",\" (i.e. apache,'
+                             'samba,downloads). \nCan be used with the \"-c\" '
+                             'flag to use default locations. Use \"-c '
+                             'None\" to ignore all default categories.\n '
+                             'Added Categories are '
+                             'compatible with user-inputted files as '
+                             'long as they follow the notation: \n\t# '
+                             'CATEGORY\n\t/location1\n\t/location2\n\t'
+                             '.../location[n]\n\t# END CATEGORY\nDefault: '
+                             '[none]')
+
     parser.add_argument('-v', "--verbose", help='Output in verbose '
                         'mode, (may conflict with '
                         'progress bar)\nDefault: False',
@@ -180,14 +204,55 @@ def main():
     parser.add_argument('-s', "--save", help='Save the raw evidence '
                                              'directory\nDefault: False',
                         action='store_true')
+    ### TODO : Allow the user to also input a Yara file/directory
+    parser.add_argument('-y', "--yara", nargs='?', help='Configure Yara IOC '
+                                            'scanning. Select -y '
+                                            'alone to enable Yara scanning. '
+                                            'Specify \'-y /path/to/yara/\' '
+                                            'to specify custom input location.'
+                                            '\nFor multiple inputs, use commas '
+                                            'between items, i.e. \'-y rule1,'
+                                            'rule2,rule_dir/\''
+                                                        '\nDefault: False',
+                        default="do_not_include")
+    parser.add_argument('-yr', "--yara_recursive", nargs='?', help='Configure '
+                                       'Recursive Yara IOC scanning. '
+                                        '\nFor multiple inputs, use commas '
+                                        'between items, i.e. \'-yr rule1,'
+                                        'rule2,rule_dir/\'. Directories in '
+                                       'this list will be scanned '
+                                       'recursively.\nCan be used in '
+                                       'conjunction with the normal -y flag.'
+                                        '\nDefault: False',
+                        default="do_not_include")
     # Compile the arguments
     args = parser.parse_args()
+
 
     # Stores the arguments into static variables
     input_file = args.input
     output_dir = args.output
-    sve = args.save
+    save = args.save
     verbose = args.verbose
+    yara = args.yara
+    yara_rec = args.yara_recursive
+    yara_inputs = {"non-recurse" : [], "recurse" : []}
+
+    # Yara data saying "None" means the flag was specified, but no paths
+    # were inputted. "do_not_include" means that flag was not specified
+    for input_save in [[yara, yara_inputs["non-recurse"]], [yara_rec,
+                                                  yara_inputs["recurse"]]]:
+        if input_save[0] == None:
+            input_save[1].append(str(script_path)+"/yara_rules/")
+        elif "do_not_include" not in input_save[0]:
+            input_save[1].extend(input_save[0].split(","))
+    if yara_inputs["non-recurse"] == yara_inputs["recurse"]:
+        yara_inputs["non-recurse"] = []
+    yara_scan = (yara_inputs["non-recurse"] != [] or
+          yara_inputs["recurse"] != [])
+
+    if yara_scan == False:
+        yara_inputs = None
 
     # Deprecated
     # img_type = args.type
@@ -211,10 +276,20 @@ def main():
         if user not in os.listdir("/home/"):
             print(f"Non-existent user, {user}. Removing...")
             user_list.remove(user)
+    # If all the users included were invalid
+    # and removed, use the default users
+    try:
+        if len(user_list) == 0:
+            raise ArgumentEmpty("users")
+    except ArgumentEmpty as e:
+        print("Error:", e)
+        user_list = os.listdir("/home")
 
     # If they did not enter "all" or use the default categories,
     # split categories into a list and remove non-existent categories
-    if "ALL" not in str(args.categories).upper():
+    if str(args.categories).upper() == "NONE":
+        cats = []
+    elif "ALL" not in str(args.categories).upper():
         cats = args.categories[0].upper().split(",")
         nonexist = list(set(cats) - set(all_cats))
         for item in nonexist:
@@ -224,12 +299,16 @@ def main():
         # Default value is ["all"]
         cats = all_cats
 
+    if args.add_categories != "":
+        add_cats = args.add_categories[0].upper().split(",")
+        cats.extend(add_cats)
+
     # If all the categories included were invalid
     # and removed, use the default categories
     try:
         if len(cats) == 0:
-            raise CategoriesEmpty
-    except CategoriesEmpty as e:
+            raise ArgumentEmpty("categories")
+    except ArgumentEmpty as e:
         print("Error:", e)
         cats = ["all"]
 
@@ -248,12 +327,23 @@ def main():
     print("\tCompiled Targets File:\t", targets_file)
     print("\tOutput Directory:\t", out_dir)
     print("\tImage Name:\t\t", img_name)
-    print("\tSave raw?\t\t", sve)
+    print("\tSave raw?\t\t", save)
     print("\tScript Path:\t\t", script_path)
     print("\tUser(s):\t\t", user_list)
     print("\tCategories:\t\t", cats)
+    print("\tYara Scanning Enabled:\t", yara_scan)
     print()
 
     # Returns generated data to main function
-    return (targets_file, cats, out_dir, img_name, sve, script_path, user_list,
-            evdc_dir, verbose)
+    return {
+        "targets_file" : targets_file,
+        "categories" : cats,
+        "output_directory" : out_dir,
+        "img_path" : img_name,
+        "raw" : save,
+        "script_path" : script_path,
+        "user_list" : user_list,
+        "evidence_directory" : evdc_dir,
+        "verbose" : verbose,
+        "yara" : yara_inputs
+    }

@@ -20,16 +20,19 @@ def getHash(iso_file):
     return sha1.hexdigest()
 
 
-def acquire(target_dir, out_dir, img_path):
-    print(f"Acquiring '{target_dir}'...")
-    os.system(f"tree -a '{target_dir}'")
+def acquire(e_dir, out_dir, img_path):
+    print(f"Acquiring '{e_dir}'...")
+    os.system(f"tree -a '{e_dir}'")
     print(f"Writing data to '{img_path}'")
-    os.system(f"mkisofs -max-iso9660-filenames -U -o '{target_dir}' '{out_dir}'")
+    os.system(f"mkisofs -max-iso9660-filenames -U -o '{e_dir}' '{out_dir}'")
+    #os.system(f"mkisofs -max-iso9660-filenames -U -o '{img_path}' '{
+    # e_dir}'") #?
 
-def main(target_dir, out_dir, img_path, raw):
-    acquire(target_dir, out_dir, img_path)
+
+def main(evdc_dir, out_dir, img_path, raw):
+    acquire(evdc_dir, out_dir, img_path)
     print("Done!")
     iso_hash = getHash(img_path)
     if not raw:
-        shutil.rmtree(target_dir)
+        shutil.rmtree(evdc_dir)
     return iso_hash

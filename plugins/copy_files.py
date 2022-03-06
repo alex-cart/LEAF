@@ -1,8 +1,8 @@
 import os
 import subprocess
 import hashlib
-from plugins.errorhandling import *
 from tqdm import tqdm
+from plugins.errorhandling import *
 
 """
 
@@ -13,7 +13,7 @@ Example:
 
 Coming next... handling user-input files
  - If a user inputs a file, it will not undergo any categorization unless 
- specified (perhaps --ix for input-extreme)
+ specified (perhaps --ix for input-extra)
  - If a user inputs his or her own files, additional categories will still 
  be a possibility to insert.
 
@@ -50,9 +50,11 @@ def checkIntegrity(s_file, d_file):
         hashes.append(sha1.hexdigest())
     # If the hashes do not match, return False
     if hashes[0] != hashes[1]:
-        return False
-    # Otherwise, if hashes match, return true
-    return True
+        match = False
+    else:
+        # Otherwise, if hashes match, return true
+        match = True
+    return (match, hashes[0], hashes[1])
 
 
 def debugfs(src, tgt, part, v):
@@ -64,12 +66,19 @@ def debugfs(src, tgt, part, v):
     :param part: (str)  partition name
     """
 
+    """ ### TODO: Test WHY I use [:-1] ?????
     # Get the original item's inode identifier
     orig_inode = subprocess.check_output(f"stat -c %i '{src}'",
                                          shell=True).decode("utf-8")[:-1]
     # Get the copied item's inode identifier
     new_inode = subprocess.check_output(f"stat -c %i '{tgt}'",
-                                        shell=True).decode("utf-8")[:-1]
+                                        shell=True).decode("utf-8")[:-1]"""
+    # Get the original item's inode identifier
+    orig_inode = subprocess.check_output(f"stat -c %i '{src}'",
+                                         shell=True).decode("utf-8").strip()
+    # Get the copied item's inode identifier
+    new_inode = subprocess.check_output(f"stat -c %i '{tgt}'",
+                                        shell=True).decode("utf-8").strip()
     # Copy the inode data associated with the source file to the copied file
     if v:
         debug_cmd = f"debugfs -wR \"copy_inode <{orig_inode}> <{new_inode}>\""\
@@ -80,7 +89,7 @@ def debugfs(src, tgt, part, v):
     os.system(debug_cmd)
 
 
-def copy_item(src, evdc_dir, part, v, l_paths):
+def copy_item(src, evdc_dir, part, v, l_paths, logfile):
     """
     Copy each item from the source to the destination with incorporation
     of debugfs to ensure the secure copy of file (inode) metadata.
@@ -109,9 +118,11 @@ def copy_item(src, evdc_dir, part, v, l_paths):
 
         copy = f"cp -p '{src}' '{new_root}'"
         os.system(copy)
-
+        check_int = checkIntegrity(src, new_root)
+        # Test if the source file and destination file have the same hash
         try:
-            if not checkIntegrity(src, new_root):
+            # If False, raise NonMatchingHashes error
+            if not check_int[0]:
                 raise NonMatchingHashes(src, new_root)
         except NonMatchingHashes as e:
             print("Error:" , e)
@@ -119,6 +130,12 @@ def copy_item(src, evdc_dir, part, v, l_paths):
         # Use debugfs to copy each file's inode data over
         debugfs(src, new_root, part, v)
 
+        try:
+            file_size = os.path.getsize(new_root)
+        except:
+            file_size = "NA"
+        # Log the action
+        logfile.new_log(src, new_root, check_int[0], check_int[1], file_size)
         # return to previous recursive statement
         return
 
@@ -140,17 +157,21 @@ def copy_item(src, evdc_dir, part, v, l_paths):
         for filename in os.listdir(src):
             # Each item in the directory will be run through copy_item()
             # recursively with an updated source, as long as not in LEAF paths
-            if not any(l_path in str(src+filename) for l_path in l_paths):
-                copy_item(src+filename, evdc_dir, part, v, l_paths)
+            if not any(l_path in os.path.join(src,filename) for l_path in
+                       l_paths):
+                copy_item(os.path.join(src, filename), evdc_dir, part, v,
+                          l_paths, logfile)
     else:
         if os.path.islink(src):
-            copy = f"cp -P '{src}' '{new_root}'"
+            copy = f"mkdir --parents '{new_root}'"
+            os.system(copy)
+            copy = f"cp -P -p '{src}' '{new_root}'"
             os.system(copy)
         else:
             return
 
 
-def main(target_file, evidence_dir, v, leaf_paths):
+def main(target_file, evidence_dir, v, leaf_paths, New_LogFile):
     """
     Main handler for the copy file + metadata operations.
     :param target_file: (str)   file of listed targets
@@ -166,8 +187,7 @@ def main(target_file, evidence_dir, v, leaf_paths):
     for i in tqdm(range(len(targets))):
         line = targets[i]
         # Removes any trailing whitespaces or special characters (i.e. "\n")
-        if not line[-1].isalnum():
-            line = line[:-1]
+        line = line.strip()
 
         # If the path does not exist, raise the DoesNotExist error
         try:
@@ -184,10 +204,12 @@ def main(target_file, evidence_dir, v, leaf_paths):
                         .decode('utf-8').split("\n")[1].split(" ")[0]
                 # push the item to copy_item()
                 if not any(l_path in line for l_path in leaf_paths):
-                    copy_item(line, evidence_dir, part, v, leaf_paths)
+                    copy_item(line, evidence_dir, part, v, leaf_paths,
+                              New_LogFile)
         except DoesNotExistError as e:
             print("Error:", e, "\nContinuing...")
         except LEAFInPath as e:
             print("Error:", e, "\nContinuing...")
 
     print("\n\n")
+    return New_LogFile

@@ -72,7 +72,7 @@ def readInputFile(in_file, cats, output_dir, script_path, users):
     return input_files_paths, targets_file
 
 
-def writeTargets(output_dir, cats, targets, users,):
+def writeTargets(output_dir, cats, targets, users):
     """
     Compile data from all the valid inputted files and parse them for the
     desired categories; then, write target locations to a single file.
@@ -105,9 +105,10 @@ def writeTargets(output_dir, cats, targets, users,):
             # If the line starts with "#", it is a header or a trailer
             if target[0] == "#":
                 # The current category is the last word in the header/trailer
-                current_cat = target.split(' ')[-1][:-1]
+                ### current_cat = target.split(' ')[-1][:-1].upper()
+                current_cat = target.split(' ')[-1].strip().upper()
                 # If "END" is not in the line, this is the header of a category
-                if target.split(" ")[1] != "END":
+                if target.split(" ")[1].upper() != "END":
                     # If the header is in the category list, a header is found
                     if current_cat in cats:
                         header_found = True

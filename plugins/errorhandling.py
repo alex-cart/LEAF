@@ -10,7 +10,8 @@ class DoesNotExistError(Exception):
 
 class NonMatchingHashes(Exception):
     def __init__(self, src, dst):
-        super().__init__(f"Error copying {src} to {dst}, wrong hash.")
+        super().__init__(f"Error copying {src} to {dst}, wrong hash. "
+                         f"Continuing...")
 
 
 class RootNotDetected(Exception):
@@ -19,9 +20,9 @@ class RootNotDetected(Exception):
                          f"root.\n Exiting...")
 
 
-class CategoriesEmpty(Exception):
-    def __init__(self):
-        super().__init__(f"No valid categories were specified. Continuing "
+class ArgumentEmpty(Exception):
+    def __init__(self, arg):
+        super().__init__(f"No valid {arg} were specified. Continuing "
                          f"with default values...")
 
 

@@ -14,6 +14,18 @@
 # EXECUTIONS
 /root/.bash_history
 /home/$USER/.bash_history
+/home/$USER/.sh_history
+/home/$USER/.zsh_history
+/home/$USER/.zsh_sessions
+/home/$USER/.zshrc
+/home/$USER/.history
+/home/$USER/.ksh_history
+/home/$USER/.fish_history
+/home/$USER/.python_history
+/home/$USER/.lesshst
+/home/$USER/.viminfo
+/home/.sh_history
+/home/.zsh_history
 /var/log/auth.log
 # END EXECUTIONS
 # LOGS
@@ -31,8 +43,15 @@
 /var/log/mysqld/
 /var/log/messages
 /var/log/secure
+/var/log/sudo.log
 /var/log/btmp
 /var/log/journal/
+/home/$USER/.history
+/home/$USER/.ksh_history
+/home/$USER/.fish_history
+/home/$USER/.python_history
+/home/$USER/.lesshst
+/home/$USER/.viminfo
 # END LOGS
 # MISC
 /var/log/syslog
@@ -71,6 +90,32 @@
 /var/log/xferlog
 /var/log/pureftp.log
 # END SERVICES
+# SHELL
+/home/$USER/.bash_history
+/home/$USER/.history
+/home/$USER/.ksh_history
+/home/$USER/.fish_history
+/home/$USER/.python_history
+/home/$USER/.lesshst
+/home/$USER/.viminfo
+/home/$USER/.sh_history
+/home/$USER/.tcsh_history
+/home/$USER/.zhistory
+/home/$USER/.zsh_history
+/home/$USER/.zsh_sessions
+/root/.bash_history
+/root/.history
+/root/.ksh_history
+/root/.fish_history
+/root/.python_history
+/root/.lesshst
+/root/.viminfo
+/root/.tcsh_history
+/root/.zhistory
+/root/.zsh_history
+/root/.sh_history
+/root/.zsh_sessions
+# END SHELL
 # STARTUP
 /etc/init.d/
 /etc/rc0.d/
@@ -107,6 +152,8 @@
 # END SYSTEM
 # TRASH
 /home/$USER/.local/share/Trash
+/home/$USER/.Trash
+/root/.Trash
 # END TRASH
 # USERS
 /home/$USER/
@@ -115,6 +162,7 @@
 /home/$USER/.config/mimeapps.list
 /home/$USER/.bashrc/
 /home/$USER/.bash_logout/
+/home/$USER/.bash_profile
 /home/$USER/.local/share
 /home/$USER/.cache
 /home/$USER/.recently-used
@@ -124,6 +172,7 @@
 /home/$USER/.Trash
 /home/$USER/.mozilla/firefox
 /home/$USER/.local/share/zeitgeist
+/home/$USER/.
 /var/log/auth.log
 /var/log/faillog
 /var/log/lastlog
