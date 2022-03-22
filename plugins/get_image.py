@@ -29,10 +29,15 @@ def acquire(e_dir, out_dir, img_path):
     # e_dir}'") #?
 
 
-def main(evdc_dir, out_dir, img_path, raw):
+def main(leaf_obj):
+    evdc_dir = leaf_obj.evidence_dir
+    out_dir = leaf_obj.output_dir
+    img_path = leaf_obj.img_path
+    raw = leaf_obj.raw
     acquire(evdc_dir, out_dir, img_path)
     print("Done!")
     iso_hash = getHash(img_path)
+    leaf_obj.iso_hash = iso_hash
     if not raw:
         shutil.rmtree(evdc_dir)
     return iso_hash

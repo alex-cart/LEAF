@@ -25,7 +25,6 @@ class ArgumentEmpty(Exception):
         super().__init__(f"No valid {arg} were specified. Continuing "
                          f"with default values...")
 
-
 def verbose(prnt, v):
     if v:
         print(prnt)

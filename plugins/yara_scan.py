@@ -2,39 +2,37 @@
 import os
 #from plugins.errorhandling import *
 
-def parse_yaradir(rules_path, files_list=[], rec="y"):
-    rules_items = rules_path.split(",")
-    for item in rules_items:
+
+def parse_yaradir(yara_rules, rec, files_list=[]):
+    for item in yara_rules:
+        item = os.path.abspath(item)
         if os.path.isdir(item):
-            if "n" in rec.lower():
-                files_list.extend([os.path.join(item + f) for f in os.listdir(
-                    item) if os.path.isfile(os.path.join(item, f))])
-            else:
+            if rec:
                 subfiles = os.listdir(item)
                 for file in subfiles:
-                    parse_yaradir(os.path.join(item, file), files_list)
-        elif os.path.isfile(item):
+                    file = os.path.join(item, file)
+                    parse_yaradir([file], files_list=files_list, rec=True)
+            else:
+                files_list.extend([os.path.join(item, f) for f in os.listdir(
+                    item) if os.path.isfile(os.path.join(item, f))])
+        elif os.path.isfile(item) and ".yar" in item[-5:].lower():
             files_list.append(item)
     return files_list
 
-def main(rules_path, verbose=False):
-    reenter = "n"
-    while "n" in reenter.lower():
-        recursive = input("Recursively get files from input directories? "
-                          "[Y/n]: ")
-        yara_items = parse_yaradir(rules_path, rec=recursive.lower())
-        print(f"Using following Yara files:\n\t{yara_items}.\nIs this okay?")
-        reenter = input("Use these files (Y), or re-enter yara input "
-                        "locations (n): ")
-        if "n" in reenter.lower():
-            new_locations = input("Enter location(s) to pull yara files "
-                                  "from: ")
-            rules_path = new_locations
-    #rules = yara.compile(filepaths=yara_dir)
+def run_yara(yara_files, v=False):
+    # what is the target??
+    # for file in yara_file, run yara [rule] [target] > output dir
+    pass
 
-#items=r'C:\Users\Anya\Downloads\hackeru,
-# C:\Users\Anya\Downloads\AliHadi2020x300.jpg'
 
-#files = main(items)
-#for file in files:
-#    print("FILE: " , file)
+def main(yara_dict, verbose=False):
+    yara_unrec = yara_dict["non-recurse"]
+    yara_rec = yara_dict["recurse"]
+    yara_files = []
+    yara_files.extend(parse_yaradir(yara_unrec, rec=False))
+    yara_files.extend(parse_yaradir(yara_rec, rec=True))
+    yara_files = list(set(yara_files))
+    if verbose:
+        print(f"Parsing files: {yara_files}")
+    return yara_files
+

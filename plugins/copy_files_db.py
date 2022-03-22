@@ -23,7 +23,7 @@ Examples:
     ./LEAF/main.py --ix my_file.txt --cx samba,apache,ssh
         # Will do the user's file's categories if it is categorized correctly
     ./LEAF/main.py --ix my_file.txt --cx network,users -c network,installation
-    
+
 """
 
 
@@ -81,15 +81,15 @@ def debugfs(src, tgt, part, v):
                                         shell=True).decode("utf-8").strip()
     # Copy the inode data associated with the source file to the copied file
     if v:
-        debug_cmd = f"debugfs -wR \"copy_inode <{orig_inode}> <{new_inode}>\""\
+        debug_cmd = f"debugfs -wR \"copy_inode <{orig_inode}> <{new_inode}>\"" \
                     f" {part}"
     else:
-        debug_cmd = f"debugfs -wR \"copy_inode <{orig_inode}> <{new_inode}>\""\
-                f" {part} > /dev/null 2>&1"
+        debug_cmd = f"debugfs -wR \"copy_inode <{orig_inode}> <{new_inode}>\"" \
+                    f" {part} > /dev/null 2>&1"
     os.system(debug_cmd)
 
 
-def copy_item(src, part, LEAFObj, logfile):
+def copy_item(src, evdc_dir, part, v, l_paths, logfile):
     """
     Copy each item from the source to the destination with incorporation
     of debugfs to ensure the secure copy of file (inode) metadata.
@@ -98,17 +98,12 @@ def copy_item(src, part, LEAFObj, logfile):
     :param part: (str)      partition that stores the files
     :return:
     """
-    
-    # Ensure that the evidence directory has a trailing "/"
-    if LEAFObj.evidence_dir[-1] != "/":
-        LEAFObj.evidence_dir = LEAFObj.evidence_dir + "/"
-
-    evdc_dir = LEAFObj.evidence_dir
-    v = LEAFObj.verbose
-    l_paths = LEAFObj.leaf_paths
-
     # The new item to be parsing; this will be the target location
     new_root = evdc_dir + src[1:]
+
+    # Ensure that the evidence directory has a trailing "/"
+    if evdc_dir[-1] != "/":
+        evdc_dir = evdc_dir + "/"
 
     if any(l_path in src for l_path in l_paths):
         verbose(f"Skipping {src}: LEAF in Path", v)
@@ -130,7 +125,7 @@ def copy_item(src, part, LEAFObj, logfile):
             if not check_int[0]:
                 raise NonMatchingHashes(src, new_root)
         except NonMatchingHashes as e:
-            print("Error:" , e)
+            print("Error:", e)
 
         # Use debugfs to copy each file's inode data over
         debugfs(src, new_root, part, v)
@@ -162,11 +157,8 @@ def copy_item(src, part, LEAFObj, logfile):
         for filename in os.listdir(src):
             # Each item in the directory will be run through copy_item()
             # recursively with an updated source, as long as not in LEAF paths
-            if not any(l_path in os.path.join(src,filename) for l_path in
-                       l_paths):
-                #copy_item(os.path.join(src, filename), evdc_dir, part, v,
-                #          l_paths, logfile)
-                copy_item(os.path.join(src, filename), part, LEAFObj, logfile)
+            if not any(l_path in str(src + filename) for l_path in l_paths):
+                copy_item(src + filename, evdc_dir, part, v, l_paths, logfile)
     else:
         if os.path.islink(src):
             copy = f"mkdir --parents '{new_root}'"
@@ -177,8 +169,7 @@ def copy_item(src, part, LEAFObj, logfile):
             return
 
 
-def main(LEAFObj, New_LogFile):#target_file, evidence_dir, v, leaf_paths,
-    # New_LogFile):
+def main(target_file, evidence_dir, v, leaf_paths, New_LogFile):
     """
     Main handler for the copy file + metadata operations.
     :param target_file: (str)   file of listed targets
@@ -187,16 +178,14 @@ def main(LEAFObj, New_LogFile):#target_file, evidence_dir, v, leaf_paths,
     :param leaf_paths: (list)   list of protected locations used by LEAF
     :return:
     """
-    target_file = LEAFObj.target_file
-    leaf_paths = LEAFObj.leaf_paths
-
     # Read all lines of the targets file and save to targets list
     with open(target_file) as f:
         targets = f.readlines()
     # Parse each line/location; uses tqdm to generate a progress bar
     for i in tqdm(range(len(targets))):
+        line = targets[i]
         # Removes any trailing whitespaces or special characters (i.e. "\n")
-        line = targets[i].strip()
+        line = line.strip()
 
         # If the path does not exist, raise the DoesNotExist error
         try:
@@ -210,12 +199,11 @@ def main(LEAFObj, New_LogFile):#target_file, evidence_dir, v, leaf_paths,
             else:
                 # Get its partition location
                 part = subprocess.check_output(f"df -T '{line}'", shell=True) \
-                        .decode('utf-8').split("\n")[1].split(" ")[0]
+                    .decode('utf-8').split("\n")[1].split(" ")[0]
                 # push the item to copy_item()
                 if not any(l_path in line for l_path in leaf_paths):
-                    ###copy_item(line, evidence_dir, part, v, leaf_paths,
-                    ###          New_LogFile)
-                    copy_item(line, part, LEAFObj, New_LogFile)
+                    copy_item(line, evidence_dir, part, v, leaf_paths,
+                              New_LogFile)
         except DoesNotExistError as e:
             print("Error:", e, "\nContinuing...")
         except LEAFInPath as e:

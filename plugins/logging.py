@@ -50,16 +50,16 @@ class Log():
         }
         self.update_df(new_log)
 
-    def new_commandlog(self, params_dict):
+    def new_commandlog(self, leaf_obj):
         new_cmdlog = {
-            "Input_TargetFile" : params_dict["targets_file"],
-            "Output_Location" : params_dict["output_directory"],
-            "Users_List" : params_dict["user_list"],
-            "Categories" : params_dict["categories"],
-            "Image_Name" : params_dict["img_path"],
-            "Verbose" : params_dict["verbose"],
-            "Save_RawData" : params_dict["raw"],
-            "YaraScanning" : params_dict["yara"]
+            "Input_TargetFile" : leaf_obj.targets_file,
+            "Output_Location" : leaf_obj.output_dir,
+            "Users_List" : leaf_obj.users_list,
+            "Categories" : leaf_obj.cats,
+            "Image_Name" : leaf_obj.img_path,
+            "Verbose" : leaf_obj.verbose,
+            "Save_RawData" : leaf_obj.raw,
+            "YaraScanning" : leaf_obj.yara
         }
         self.update_df(new_cmdlog, log_type="Cmd")
         self.write_to_file(log_type="Cmd")
