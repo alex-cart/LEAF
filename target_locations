@@ -9,21 +9,21 @@
 /var/log/apt/
 /var/lib/dpkg/
 /var/lib/systemd/coredump
-/home/$USER/.config/autostart/
+$USERHOME/.config/autostart/
 # END APPLICATIONS
 # EXECUTIONS
 /root/.bash_history
-/home/$USER/.bash_history
-/home/$USER/.sh_history
-/home/$USER/.zsh_history
-/home/$USER/.zsh_sessions
-/home/$USER/.zshrc
-/home/$USER/.history
-/home/$USER/.ksh_history
-/home/$USER/.fish_history
-/home/$USER/.python_history
-/home/$USER/.lesshst
-/home/$USER/.viminfo
+$USERHOME/.bash_history
+$USERHOME/.sh_history
+$USERHOME/.zsh_history
+$USERHOME/.zsh_sessions
+$USERHOME/.zshrc
+$USERHOME/.history
+$USERHOME/.ksh_history
+$USERHOME/.fish_history
+$USERHOME/.python_history
+$USERHOME/.lesshst
+$USERHOME/.viminfo
 /home/.sh_history
 /home/.zsh_history
 /var/log/auth.log
@@ -46,12 +46,12 @@
 /var/log/sudo.log
 /var/log/btmp
 /var/log/journal/
-/home/$USER/.history
-/home/$USER/.ksh_history
-/home/$USER/.fish_history
-/home/$USER/.python_history
-/home/$USER/.lesshst
-/home/$USER/.viminfo
+$USERHOME/.history
+$USERHOME/.ksh_history
+$USERHOME/.fish_history
+$USERHOME/.python_history
+$USERHOME/.lesshst
+$USERHOME/.viminfo
 # END LOGS
 # MISC
 /var/log/syslog
@@ -91,30 +91,18 @@
 /var/log/pureftp.log
 # END SERVICES
 # SHELL
-/home/$USER/.bash_history
-/home/$USER/.history
-/home/$USER/.ksh_history
-/home/$USER/.fish_history
-/home/$USER/.python_history
-/home/$USER/.lesshst
-/home/$USER/.viminfo
-/home/$USER/.sh_history
-/home/$USER/.tcsh_history
-/home/$USER/.zhistory
-/home/$USER/.zsh_history
-/home/$USER/.zsh_sessions
-/root/.bash_history
-/root/.history
-/root/.ksh_history
-/root/.fish_history
-/root/.python_history
-/root/.lesshst
-/root/.viminfo
-/root/.tcsh_history
-/root/.zhistory
-/root/.zsh_history
-/root/.sh_history
-/root/.zsh_sessions
+$USERHOME/.bash_history
+$USERHOME/.history
+$USERHOME/.ksh_history
+$USERHOME/.fish_history
+$USERHOME/.python_history
+$USERHOME/.lesshst
+$USERHOME/.viminfo
+$USERHOME/.sh_history
+$USERHOME/.tcsh_history
+$USERHOME/.zhistory
+$USERHOME/.zsh_history
+$USERHOME/.zsh_sessions
 # END SHELL
 # STARTUP
 /etc/init.d/
@@ -145,34 +133,33 @@
 /etc/modules
 /etc/modules-load.d
 /etc/modules-load.conf
-/home/$USER/.config/systemd
+$USERHOME/.config/systemd
 /usr/lib/systemd/
 /var/log/journal/
 /var/log/syslog
 # END SYSTEM
 # TRASH
-/home/$USER/.local/share/Trash
-/home/$USER/.Trash
-/root/.Trash
+$USERHOME/.local/share/Trash
+$USERHOME/.Trash
 # END TRASH
 # USERS
-/home/$USER/
-/home/$USER/.bash_history
-/home/$USER/.config/
-/home/$USER/.config/mimeapps.list
-/home/$USER/.bashrc/
-/home/$USER/.bash_logout/
-/home/$USER/.bash_profile
-/home/$USER/.local/share
-/home/$USER/.cache
-/home/$USER/.recently-used
-/home/$USER/.cache/thumbnails
-/home/$USER/.local/share/Trash
-/home/$USER/.local/share/recently-used.xbel
-/home/$USER/.Trash
-/home/$USER/.mozilla/firefox
-/home/$USER/.local/share/zeitgeist
-/home/$USER/.
+$USERHOME/
+$USERHOME/.bash_history
+$USERHOME/.config/
+$USERHOME/.config/mimeapps.list
+$USERHOME/.bashrc/
+$USERHOME/.bash_logout/
+$USERHOME/.bash_profile
+$USERHOME/.local/share
+$USERHOME/.cache
+$USERHOME/.recently-used
+$USERHOME/.cache/thumbnails
+$USERHOME/.local/share/Trash
+$USERHOME/.local/share/recently-used.xbel
+$USERHOME/.Trash
+$USERHOME/.mozilla/firefox
+$USERHOME/.local/share/zeitgeist
+$USERHOME/.
 /var/log/auth.log
 /var/log/faillog
 /var/log/lastlog

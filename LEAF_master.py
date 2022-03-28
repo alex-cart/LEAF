@@ -103,9 +103,9 @@ class Log:
 
     def new_errorlog(self, e, f):
         new_errlog = {
-            "Time" : datetime.now().strftime("%Y-%m-%d_%H-%M-%S"),
-            "Error" : e,
-            "Function" : f
+            "Time": datetime.now().strftime("%Y-%m-%d_%H-%M-%S"),
+            "Error": e,
+            "Function": f
         }
         self.update_df(new_errlog, log_type="Err")
 
@@ -168,12 +168,20 @@ class LEAFInfo():
             img_path (str)      : file location + name of ISO image
             evidence_dir (str)  : location + name of evidence directory
             users_list (list)   : list of users to parse
+            users_dict (dict)   : dictionary of user information for inputted
+                                    users
+            all_users (dict)    : dictionary of all user information on the host
+            primary_users (dict): dictionary of all non-service user
+                                    information
+            groups (dict)       : group information present on the system
             yara_inputs (dict)  : dictionary of inputted yara file locations
                                     (non-recursive and recursive)
             yara_files (list)   : list of yara rule files
             yara_scan_bool (bool)   : whether or not yara is enabled
             raw (bool)          : whether or not to save file clones in
                                     directory (evidence_dir)
+            get_ownership (list): list of locations to parse for user-owned
+                                    files
             iter (str)          : iterable value to associate evidence_dir
                                     and targets_file
             leaf_paths (list)   : list of protected paths; not acquired
@@ -181,9 +189,9 @@ class LEAFInfo():
 
         """
         self.script_path = "/".join(os.path.realpath(__file__).split('/')[
-                                 :-1])+"/"
+                                    :-1]) + "/"
         self.abs_path = "/".join(os.path.abspath(__file__).split("/")[
-                                 :-1])+"/"
+                                 :-1]) + "/"
         self.input_files = [os.path.join(self.abs_path, "target_locations")]
         self.targets_file = os.path.join(self.abs_path, "target_locations")
         self.all_cats = ["APPLICATIONS", "EXECUTIONS", "LOGS", "MISC",
@@ -194,12 +202,17 @@ class LEAFInfo():
         self.output_dir = os.path.join(os.getcwd(), "LEAF_output/")
         self.img_path = str("LEAF_acquisition_" + str(datetime.now()) + ".ISO")
         self.evidence_dir = os.path.join(self.output_dir, "evidence")
-        self.users_list = os.listdir("/home")
+        self.users_dict = {}
+        self.users_list = []
+        self.all_users = {}
+        self.primary_users = {}
+        self.groups = {}
         self.yara_inputs = {"recurse": [], "non-recurse": []}
         self.yara_files = []
         self.yara_scan_bool = False
         self.verbose = False
         self.raw = False
+        self.get_ownership = []
         self.iter = ""
         self.leaf_paths = [self.script_path, self.abs_path, self.output_dir]
         self.iso_hash = ""
@@ -219,8 +232,13 @@ class LEAFInfo():
                 raw : Whether or not to save the raw evidence clone directory
                 script_path : Path to the LEAF scripts
                 users_list : List of users to parse
+                users_dict : dictionary of user information for inputted users
+                all_users : dictionary of all user information on the host
+                primary_users : dictionary of all non-service user information
+                groups : groups present on the system
                 evidence_dir : Evidence Directory (out_dir/evdc_dir)
                 yara_scan_bool : whether or not yara scanning is enabled
+                get_ownership : list of locations to parse for user-owned files
                 yara_files : list of yara files from which rules will be pulled
                 leaf_paths : list of protected locations that must not be
                             acquired
@@ -231,21 +249,21 @@ class LEAFInfo():
             description=(bColors.Green +
                          'LEAF (Linux Evidence Acquisition Framework) - '
                          'Cartware\n'
-             '     ____        _________    ___________   __________ \n'
-             '    /   /       /   _____/   /  ____    /  /   ______/\n'
-             '   /   /       /   /____    /  /___/   /  /   /____  \n'
-             '  /   /       /   _____/  /   ____    /  /   _____/\n'
-             ' /   /_____  /   /_____  /   /   /   /  /   /      \n'
-             '/_________/ /_________/ /___/   /___/  /___/          v1.5\n\n' +
-                     bColors.ENDC +
-                     'Process Ubuntu 20.04/Debian file systems for forensic '
-                     'artifacts, extract important data, \nand export '
-                     'information to an ISO9660 file. Compatible with EXT4 '
-                     'file system and common \nlocations on Ubuntu 20.04 '
-                     'operating system.\nSee help page for more '
-                     'information.\nSuggested usage: Do not run from LEAF/ '
-                     'directory'
-                     + bColors.ENDC),
+                         '     ____        _________    ___________   __________ \n'
+                         '    /   /       /   _____/   /  ____    /  /   ______/\n'
+                         '   /   /       /   /____    /  /___/   /  /   /____  \n'
+                         '  /   /       /   _____/  /   ____    /  /   _____/\n'
+                         ' /   /_____  /   /_____  /   /   /   /  /   /      \n'
+                         '/_________/ /_________/ /___/   /___/  /___/          v1.9\n\n' +
+                         bColors.ENDC +
+                         'Process Ubuntu 20.04/Debian file systems for forensic '
+                         'artifacts, extract important data, \nand export '
+                         'information to an ISO9660 file. Compatible with EXT4 '
+                         'file system and common \nlocations on Ubuntu 20.04 '
+                         'operating system.\nSee help page for more '
+                         'information.\nSuggested usage: Do not run from LEAF/ '
+                         'directory'
+                         + bColors.ENDC),
             epilog="Example Usages:\n\n"
                    "To use default arguments [this will use "
                    "default input file (./target_locations), users ("
@@ -256,10 +274,10 @@ class LEAFInfo():
                    bColors.Green + "\n\tLEAF_main.py\n\n" + bColors.ENDC +
                    "All arguments:\n\t" + bColors.Green +
                    "LEAF_main.py -i /home/alice/Desktop/customfile1.txt -o "
-                   "/home/alice/Desktop/ExampleOutput/ -c logs,startup,"
-                   "services -x apache -u alice bob charlie -s -v -y "
-                   "/path/to/yara_rule1.yar -yr /path2/to/yara_rules/\n\n" +
-                   bColors.ENDC + "To specify usernames, categories, "
+                   "/home/alice/Desktop/ExampleOutput/ -c logs startup "
+                   "services apache -u alice bob charlie -s -v -y "
+                   "/path/to/yara_rule1.yar -yr /path2/to/yara_rules/ -g /etc/"
+                   "\n\n" + bColors.ENDC + "To specify usernames, categories, "
                    "and yara files:\n\t" + bColors.Green +
                    "LEAF_main.py -u alice bob charlie -c applications "
                    "executions users -y /home/alice/Desktop/yara1.yar "
@@ -284,28 +302,23 @@ class LEAFInfo():
                             default=os.path.join(os.getcwd(), "LEAF_output/"),
                             help='Output directory location\nDefault: '
                                  './LEAF_output')
-        try:
-            parser.add_argument('-u', "--users", nargs='+',
-                                default=os.listdir("/home"),
-                                help='Users to include in output, separated '
-                                     'by spaces (i.e. -u alice bob charlie). '
-                                     '\nMUST be in /home/ directory\n'
-                                     'Default: All users in /home/ directory')
-        except FileNotFoundError:
-            parser.add_argument('-u', "--users", nargs='+',
-                                default=[],
-                                help='Users to include '
-                                     'in output, separated by \",\" (i.e. '
-                                     'alice,bob,charlie). \nMUST be in /home/ '
-                                     'directory\nDefault: All users')
 
-        parser.add_argument('-c', "--categories", nargs='*', type=str,
+        parser.add_argument('-u', "--users", nargs='+',
+                            default=[],
+                            help='Users to include in output, separated '
+                                 'by spaces (i.e. -u alice bob root). '
+                                 '\nUsers not present in /etc/passwd will be '
+                                 'removed\nDefault: All non-service users '
+                                 'in /etc/passwd')
+
+        parser.add_argument('-c', "--categories", nargs='+', type=str,
                             default=self.all_cats,
                             help='Explicit artifact categories to include '
                                  'during acquisition. \nCategories must be '
                                  'separated by space, (i.e. -c network users '
                                  'apache).\nFull List of built-in categories '
-                                 'includes:'+list_to_str(self.all_cats, "\t") +
+                                 'includes:' + list_to_str(self.all_cats,
+                                                           "\t") +
                                  '\nCategories are compatible with '
                                  'user-inputted files as long as they follow '
                                  'the notation:' + bColors.Yellow +
@@ -323,11 +336,22 @@ class LEAFInfo():
                                                  'directory\nDefault: False',
                             action='store_true')
 
+        parser.add_argument('-g', "--get_ownership", nargs='*',
+                            help='Get files and directories owned by included '
+                                 'users.\nEnabling this will '
+                                 'increase parsing time.\nUse -g '
+                                 'alone to parse from / root '
+                                 'directory.\nInclude paths after '
+                                 '-g to specify target locations ('
+                                 'i.e. "-g /etc '
+                                 '/home/user/Downloads/\nDefault: '
+                                 'Disabled', default="disabled")
+
         parser.add_argument('-y', "--yara", nargs='*',
                             default="do_not_include",
                             help='Configure Yara IOC scanning. Select -y '
-                                 'alone to enable Yara scanning.\nSpecify \'-y '
-                                 '/path/to/yara/\' to specify custom input '
+                                 'alone to enable Yara scanning.\nSpecify \'-y'
+                                 ' /path/to/yara/\' to specify custom input '
                                  'location.\nFor multiple inputs, use spaces '
                                  'between items,\ni.e. \'-y rulefile1.yar '
                                  'rulefile2.yara rule_dir/\'\nAll yara files '
@@ -381,7 +405,20 @@ class LEAFInfo():
 
         self.create_output_dir()
 
-        self.set_users(args.users)
+        self.get_all_users()
+        if len(self.users_list) == 0:
+            in_users = list(self.primary_users.keys())
+        else:
+            in_users = args.users
+        self.set_users(in_users)
+
+        if args.get_ownership == []:
+            self.get_ownership = ["/"]
+        elif args.get_ownership == "disabled":
+            self.get_ownership = []
+        else:
+            self.get_ownership = [os.path.abspath(loc) for loc in
+                                  args.get_ownership]
 
         user_cats = [x.upper() for x in args.categories]
         self.set_cats(user_cats)
@@ -399,27 +436,13 @@ class LEAFInfo():
         print()
 
     def set_users(self, in_users):
-        # Checks each user and remove users that do not exist
-        accepted_users = in_users
-        ### TODO: import user list from /etc/passwd
-        users_in_home = [uname.upper() for uname in os.listdir("/home")]
-
-        for i in range(len(in_users)):
-            userx = in_users[i-1]
-            if userx.upper() not in users_in_home:
-                print(f"Non-existent user, {userx}. Removing...")
-                accepted_users.remove(userx)
-
-        # If all the users included were invalid
-        # and removed, use the default users
-        try:
-            if len(accepted_users) == 0:
-                raise ArgumentEmpty("users")
-        except ArgumentEmpty as e:
-            print("Error:", e)
-            accepted_users = os.listdir("/home")
-
-        self.users_list = accepted_users
+        output_users = {}
+        for user in in_users:
+            for uname in self.all_users:
+                if user.upper() == uname.upper():
+                    output_users[uname] = all_list[uname]
+        self.users_dict = output_users
+        self.users_list = list(self.users_dict.keys())
 
     def set_cats(self, user_cats):
         cats = []
@@ -523,6 +546,64 @@ class LEAFInfo():
         self.verbose_write(f"Creating evidence directory: "
                            f"{self.evidence_dir}...")
 
+    def get_all_users(self):
+        passwd_file = "/etc/passwd"
+        groups_file = "/etc/group"
+        users_dict = {}
+        primary_users_dict = {}
+        groups_dict = {}
+
+        with open(groups_file, "r") as file:
+            group_lines = file.readlines()
+            for line in group_lines:
+                vals = line.split(":")
+                groups_dict[vals[2].strip()] = {
+                    "gid": int(vals[2].strip()),
+                    "gname": vals[0].strip(),
+                    "users": [u.strip() for u in vals[3].split(
+                        ",") if u != "" and u != "\n"]
+                }
+        with open(passwd_file, "r") as file:
+            passwd_lines = file.readlines()
+            for line in passwd_lines:
+                vals = line.split(":")
+                try:
+                    users_dict[vals[0].strip()] = {
+                        "uname": vals[0].strip(),
+                        "uid": int(vals[2].strip()),
+                        "groups": [groups_dict[vals[3]]["gname"]],
+                        "home": vals[5].strip()
+                    }
+                except KeyError:
+                    users_dict[vals[0].strip()] = {
+                        "uname": vals[0].strip(),
+                        "uid": int(vals[2].strip()),
+                        "groups": [vals[3].strip()],
+                        "home": vals[5].strip()
+                    }
+        for group in groups_dict:
+            gname = groups_dict[group]["gname"]
+            users_in_group = groups_dict[group]["users"]
+            if len(users_in_group) > 0:
+                for user in users_in_group:
+                    user = user.strip()
+                    users_dict[user]["groups"].append(gname)
+
+        for user in users_dict:
+            uid = users_dict[user]["uid"]
+            if (uid > 999 and uid <= 10000) or uid == 0:
+                primary_users_dict[user] = users_dict[user]
+
+        self.all_users = users_dict
+        self.primary_users = primary_users_dict
+        self.groups = groups_dict
+
+    def get_file_ownership(self):
+        for root_target in self.get_ownership:
+            for user in self.users_list:
+                os.system(f"find {root_target} -user {user} >> "
+                          f"{self.targets_file}")
+
     def read_input_files(self):
         # Write every target location stored in input_files to a
         # temporary list
@@ -556,7 +637,7 @@ class LEAFInfo():
         header_found = False
         # For each user, for each target line
         # (directory, file, header, trailer)
-        for user in self.users_list:
+        for user in self.users_dict:
             for target in targets:
                 # If the line starts with "#", it is a header or a trailer
                 if target[0] == "#":
@@ -576,11 +657,14 @@ class LEAFInfo():
                 elif target != "":
                     # If the line is not a header/trailer nor empty...
                     if header_found:
-                        # Write the line with replacing $USER with a user
-                        new_target = target.replace("$USER", user)
+                        # Write the line with replacing   with a user
+                        new_target = target.replace("$USERHOME",
+                                                    self.users_dict[user][
+                                                        "home"])
                         f.write(new_target + "\n")
 
         # Close the file after all writes and return the compiled target file
+        self.get_file_ownership()
         f.close()
 
     def parse_yaradir(self, yara_rules, rec):
@@ -635,8 +719,9 @@ class LEAFInfo():
                         try:
                             self.copy_item(line, part, New_LogFile)
                         except FileNotFoundError as e:
-                            self.verbose_write(f"Cannot find file or directory,"
-                                               f" {line}. Continuing...")
+                            self.verbose_write(
+                                f"Cannot find file or directory,"
+                                f" {line}. Continuing...")
                             New_LogFile.new_errorlog(e, "copy_files_main")
             except DoesNotExistError as e:
                 if self.verbose: print("Error:", e, "\nContinuing...")
@@ -685,7 +770,8 @@ class LEAFInfo():
                 try:
                     self.copy_item(file, part, logfile)
                 except KeyboardInterrupt:
-                    print("Exit triggered (^Z, ^C). Saving current progress...")
+                    print(
+                        "Exit triggered (^Z, ^C). Saving current progress...")
                 except FileNotFoundError as e:
                     print(f"Cannot find file or directory, {file}. "
                           f"Continuing...")
@@ -833,6 +919,15 @@ class LEAFInfo():
                     f"User(s):\t\t{self.users_list}\n\t" \
                     f"Categories:\t\t{self.cats}\n\t" \
                     f"Yara Scanning Enabled:\t{self.yara_scan_bool}"
+        if self.verbose:
+            out = out + f"\n\t" \
+                        f"Yara Files:\t\t{self.yara_files}\n\t" \
+                        f"Verbose:\t\t{self.verbose}\n\t" \
+                        f"Get files by ownership: {len(self.get_ownership) > 0}\n\t" \
+                        f"'Ownership' Location(s): {self.get_ownership}\n\t" \
+                        f"Protected Locations:\t{self.leaf_paths}\n\t" \
+                        f"ISO Hash:\t\t{self.iso_hash}"
+
         return out
 
 
