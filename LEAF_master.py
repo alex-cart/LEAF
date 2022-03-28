@@ -1,16 +1,22 @@
-from plugins.errorhandling import *
+#!/usr/bin/python
+import pandas as pd
+from extensions.errorhandling import *
 import os
 from datetime import datetime
 import argparse
 from argparse import RawTextHelpFormatter
-from plugins.logging import Log
-import pandas as pd
 from tqdm import tqdm
 import subprocess
 import hashlib
 import shutil
 
-class bcolors:
+"""
+May need to install packages like pandas using `sudo -H pip3 install pandas`
+or `sudo -H pip3 install -r requirements.txt
+"""
+
+
+class bColors:
     BOLD = '\033[1m'
     UNDERLINE = '\033[4m'
     Black = "\033[30m"
@@ -31,7 +37,7 @@ class bcolors:
     ENDC = '\033[0m'
 
 
-class Log():
+class Log:
     def __init__(self, save_loc=str(os.getcwd() + "/LEAF_output/")):
         """
         Create a new log session for logging file cloning operations and
@@ -41,10 +47,10 @@ class Log():
         self.save_loc = save_loc
 
         # Filename of the new log series ("logitem_YYYY-MM-DD_hhmmss")
-        self.log_fname = "logitem_" + str(datetime.datetime.now().strftime(
+        self.log_fname = "logitem_" + str(datetime.now().strftime(
             "%Y-%m-%d_%H%M%S"))
 
-        # Create headers for file-clone log and command log
+        # Create headers for file-clone log, command log, and error log
         self.full_log = pd.DataFrame(columns=["Source_File", "Dest_File",
                                               "Source_Hash", "Dest_Hash",
                                               "Integrity", "File_Size",
@@ -54,7 +60,9 @@ class Log():
                                              "Users_List", "Categories",
                                              "Image_Name",
                                              "Verbose", "Save_RawData",
-                                             "YaraScanning"])
+                                             "Yara_Scanning", "Yara_Files"])
+
+        self.err_log = pd.DataFrame(columns=["Time", "Error", "Function"])
 
     def new_log(self, src_name, dst_name, src_hash, dst_hash, size=0):
         """
@@ -63,41 +71,61 @@ class Log():
         :param dst_name: (str)  name of destination file
         :param src_hash: (str)  hash of original file
         :param dst_hash: (str)  hash of destination file
+        :param size: (int)      size of file (B)
         :return:
         """
-        current_time = str(datetime.datetime.utcnow()).replace(" ", "T")
+        current_time = str(datetime.utcnow()).replace(" ", "T")
         new_log = {
-            "Source_File" : src_name,
-            "Dest_File" : dst_name,
-            "Source_Hash" : src_hash,
-            "Dest_Hash" : dst_hash,
-            "Integrity" : src_hash == dst_hash,
-            "File_Size" : size,
-            "Time_UTC" : current_time,
+            "Source_File": src_name,
+            "Dest_File": dst_name,
+            "Source_Hash": src_hash,
+            "Dest_Hash": dst_hash,
+            "Integrity": src_hash == dst_hash,
+            "File_Size": size,
+            "Time_UTC": current_time,
         }
         self.update_df(new_log)
 
     def new_commandlog(self, leaf_obj):
         new_cmdlog = {
-            "Input_TargetFile" : leaf_obj.targets_file,
-            "Output_Location" : leaf_obj.output_dir,
-            "Users_List" : leaf_obj.users_list,
-            "Categories" : leaf_obj.cats,
-            "Image_Name" : leaf_obj.img_path,
-            "Verbose" : leaf_obj.verbose,
-            "Save_RawData" : leaf_obj.raw,
-            "YaraScanning" : leaf_obj.yara
+            "Input_TargetFile": leaf_obj.targets_file,
+            "Output_Location": leaf_obj.output_dir,
+            "Users_List": str(leaf_obj.users_list),
+            "Categories": str(leaf_obj.cats),
+            "Image_Name": leaf_obj.img_path,
+            "Verbose": leaf_obj.verbose,
+            "Save_RawData": leaf_obj.raw,
+            "Yara_Scanning": leaf_obj.yara_scan_bool,
+            "Yara_Files": str(leaf_obj.yara_files)
         }
         self.update_df(new_cmdlog, log_type="Cmd")
         self.write_to_file(log_type="Cmd")
 
+    def new_errorlog(self, e, f):
+        new_errlog = {
+            "Time" : datetime.now().strftime("%Y-%m-%d_%H-%M-%S"),
+            "Error" : e,
+            "Function" : f
+        }
+        self.update_df(new_errlog, log_type="Err")
 
     def update_df(self, new_log, log_type="File"):
         if log_type == "File":
-            self.full_log = self.full_log.append(new_log, ignore_index=True)
-        else:
-            self.cmd_log = self.cmd_log.append(new_log, ignore_index=True)
-
+            new_log = pd.DataFrame(new_log,
+                                   columns=list(self.full_log.columns),
+                                   index=[0])
+            self.full_log = pd.concat([self.full_log, new_log],
+                                      ignore_index=True)
+        elif log_type == "Cmd":
+            new_log = pd.DataFrame(new_log, columns=list(self.cmd_log.columns),
+                                   index=[0])
+            self.cmd_log = pd.concat([self.cmd_log, new_log],
+                                     ignore_index=True)
+        elif log_type == "Err":
+            new_log = pd.DataFrame(new_log, columns=list(self.err_log.columns),
+                                   index=[0])
+            self.err_log = pd.concat([self.err_log, new_log],
+                                     ignore_index=True)
 
     def write_to_file(self, fname="", log_type="File"):
         floc = self.save_loc
@@ -105,12 +133,13 @@ class Log():
             fname = self.log_fname + ".csv"
 
         if log_type == "File":
-            if fname == "":
-                fname = self.log_fname + ".csv"
             write_log = self.full_log
-        else:
+        elif log_type == "Cmd":
             fname = self.log_fname + "_CommandData.csv"
             write_log = self.cmd_log
+        elif log_type == "Err":
+            fname = self.log_fname + "_ErrorLog.csv"
+            write_log = self.err_log
 
         write_path = str(floc + fname)
         try:
@@ -125,56 +154,81 @@ class Log():
 
 
 class LEAFInfo():
-    def __init__(self, in_files="", t_file="", cats="", out="", img="", raw="",
-                 script="", users="", evdc="", v="", yara="",
-                 yara_f="", leaf="", abs_path=""):
-        self.input_files = in_files
-        self.targets_file = t_file
-        self.cats = cats
-        self.output_dir = out
-        self.img_path = img
-        self.raw = raw
-        self.users_list = users
-        self.evidence_dir = evdc
-        self.verbose = v
-        self.yara_all = yara
-        self.yara_files = yara_f
-        self.script_path = script
-        self.abs_path = abs_path
-        self.leaf_paths = []
-        self.iso_hash = ""
+    def __init__(self):
+        """
+        Class Attributes:
+            script_path (str)   : real path to script
+            abs_path (str)      : absolute path to script
+            input_files (list)  : files the user inputs for parsing
+            targets_file (str)  : created file containing list of artifact
+                                    locations
+            all_cats (list)     : list of all default categories
+            cats (list)         : list of categories user seeks to parse
+            output_dir (str)    : location to output evidence, logs, and image
+            img_path (str)      : file location + name of ISO image
+            evidence_dir (str)  : location + name of evidence directory
+            users_list (list)   : list of users to parse
+            yara_inputs (dict)  : dictionary of inputted yara file locations
+                                    (non-recursive and recursive)
+            yara_files (list)   : list of yara rule files
+            yara_scan_bool (bool)   : whether or not yara is enabled
+            raw (bool)          : whether or not to save file clones in
+                                    directory (evidence_dir)
+            iter (str)          : iterable value to associate evidence_dir
+                                    and targets_file
+            leaf_paths (list)   : list of protected paths; not acquired
+            iso_hash (str)      : hash of ISO file
+
+        """
+        self.script_path = "/".join(os.path.realpath(__file__).split('/')[
+                                 :-1])+"/"
+        self.abs_path = "/".join(os.path.abspath(__file__).split("/")[
+                                 :-1])+"/"
+        self.input_files = [os.path.join(self.abs_path, "target_locations")]
+        self.targets_file = os.path.join(self.abs_path, "target_locations")
         self.all_cats = ["APPLICATIONS", "EXECUTIONS", "LOGS", "MISC",
                          "NETWORK", "STARTUP", "SERVICES", "SYSTEM",
                          "TRASH", "USERS"]
+        self.cats = ["APPLICATIONS", "EXECUTIONS", "LOGS", "MISC", "USERS",
+                     "NETWORK", "STARTUP", "SERVICES", "SYSTEM", "TRASH"]
+        self.output_dir = os.path.join(os.getcwd(), "LEAF_output/")
+        self.img_path = str("LEAF_acquisition_" + str(datetime.now()) + ".ISO")
+        self.evidence_dir = os.path.join(self.output_dir, "evidence")
+        self.users_list = os.listdir("/home")
+        self.yara_inputs = {"recurse": [], "non-recurse": []}
+        self.yara_files = []
+        self.yara_scan_bool = False
+        self.verbose = False
+        self.raw = False
+        self.iter = ""
+        self.leaf_paths = [self.script_path, self.abs_path, self.output_dir]
+        self.iso_hash = ""
 
     def get_params(self):
         """
-            Main handler for interpreting user input information creating the forensic
-            environment for output items.
-            :return: user parameters:
+            Main handler for interpreting user input information creating the
+            forensic environment for output items.
+            Assigns the following class attributes:
+                input_files : list of "targets" files the user chooses to
+                            include
                 targets_file : Location of the compiled targets file
                 cats : Categories to parse
-                out_dir : Output directory for all evidence and LEAF-generated files
-                img_name : Name and location of the ISO Image File
-                sve : Whether or not to save the raw evidence clone directory
+                output_dir : Output directory for all evidence and
+                            LEAF-generated files
+                img_path : Name and location of the ISO Image File
+                raw : Whether or not to save the raw evidence clone directory
                 script_path : Path to the LEAF scripts
-                user_lis : List of users to parse
-                evdc_dir : Evidence Directory (out_dir/evdc_dir)
+                users_list : List of users to parse
+                evidence_dir : Evidence Directory (out_dir/evdc_dir)
+                yara_scan_bool : whether or not yara scanning is enabled
+                yara_files : list of yara files from which rules will be pulled
+                leaf_paths : list of protected locations that must not be
+                            acquired
             """
-
-        # Gets the real path of the script. If the script is run from symlink,
-        # this will output the source of the symlink
-        self.script_path = "/".join(os.path.realpath(__file__).split('/')[
-                                 :-2])+"/"
-
-        self.abs_path = str("/".join(os.path.abspath(__file__).split("/")[
-                                     :-1]))+"/"
-
-        self.leaf_paths = [self.abs_path, self.script_path, self.output_dir]
 
         # Creates argparse parser
         parser = argparse.ArgumentParser(
-            description=(bcolors.Green +
+            description=(bColors.Green +
                          'LEAF (Linux Evidence Acquisition Framework) - '
                          'Cartware\n'
              '     ____        _________    ___________   __________ \n'
@@ -182,85 +236,87 @@ class LEAFInfo():
              '   /   /       /   /____    /  /___/   /  /   /____  \n'
              '  /   /       /   _____/  /   ____    /  /   _____/\n'
              ' /   /_____  /   /_____  /   /   /   /  /   /      \n'
-             '/_________/ /_________/ /___/   /___/  /___/          v1.2\n\n' +
-                         bcolors.ENDC +
-                         'Process Ubuntu 20.04/Debian file systems for forensic '
-                         'artifacts, extract important data, \nand export '
-                         'information to an ISO9660 file. Compatible with EXT4 '
-                         'file system and common \nlocations on Ubuntu 20.04 '
-                         'operating system.\nSee help page for more '
-                         'information.\nSuggested usage: Do not run from LEAF/ '
-                         'directory'
-                         + bcolors.ENDC),
+             '/_________/ /_________/ /___/   /___/  /___/          v1.5\n\n' +
+                     bColors.ENDC +
+                     'Process Ubuntu 20.04/Debian file systems for forensic '
+                     'artifacts, extract important data, \nand export '
+                     'information to an ISO9660 file. Compatible with EXT4 '
+                     'file system and common \nlocations on Ubuntu 20.04 '
+                     'operating system.\nSee help page for more '
+                     'information.\nSuggested usage: Do not run from LEAF/ '
+                     'directory'
+                     + bColors.ENDC),
             epilog="Example Usages:\n\n"
                    "To use default arguments [this will use "
                    "default input file (./target_locations), users ("
                    "all users), categories (all categories), "
-                   "and output location (./LEAF_output/). Cloned data will not "
-                   "be stored in a local directory, verbose mode is off, "
+                   "and output location (./LEAF_output/). Cloned data will "
+                   "not be stored in a local directory, verbose mode is off, "
                    "and yara scanning is disabled]:" +
-                   bcolors.Green + "\n\tLEAF_main.py\n\n" + bcolors.ENDC +
-                   "All arguments:\n\t" + bcolors.Green +
+                   bColors.Green + "\n\tLEAF_main.py\n\n" + bColors.ENDC +
+                   "All arguments:\n\t" + bColors.Green +
                    "LEAF_main.py -i /home/alice/Desktop/customfile1.txt -o "
                    "/home/alice/Desktop/ExampleOutput/ -c logs,startup,"
-                   "services -x apache -u alice,bob,charlie -s -v -y -yr "
-                   "/path/to/yara_rules/\n" + bcolors.ENDC +
-                   "To specify usernames, categories, and yara files:\n\t" +
-                   bcolors.Green +
-                   "LEAF_main.py -u alice,bob,charlie -c applications,"
-                   "executions,users -y /home/alice/Desktop/yara1.yar,"
-                   "/home/alice/Desktop/yara2.yar" + bcolors.ENDC +
-                   "\nTo include custom input file(s) and categories:\n\t" +
-                   bcolors.Green +
-                   "LEAF_main.py -i /home/alice/Desktop/customfile1.txt,"
-                   "/home/alice/Desktop/customfile2.txt -x apache,xampp\n" +
-                   bcolors.ENDC,
+                   "services -x apache -u alice bob charlie -s -v -y "
+                   "/path/to/yara_rule1.yar -yr /path2/to/yara_rules/\n\n" +
+                   bColors.ENDC + "To specify usernames, categories, "
+                   "and yara files:\n\t" + bColors.Green +
+                   "LEAF_main.py -u alice bob charlie -c applications "
+                   "executions users -y /home/alice/Desktop/yara1.yar "
+                   "/home/alice/Desktop/yara2.yar\n\n" + bColors.ENDC +
+                   "To include custom input file(s) and categories:\n\t" +
+                   bColors.Green +
+                   "LEAF_main.py -i /home/alice/Desktop/customfile1.txt "
+                   "/home/alice/Desktop/customfile2.txt -c apache xampp\n" +
+                   bColors.ENDC,
             formatter_class=RawTextHelpFormatter)
 
         # Add arguments to parser
         parser.add_argument('-i', "--input", nargs='+',
-                            default=[str(self.script_path +
-                                         "target_locations")],
+                            default=[os.path.join(self.abs_path,
+                                                  "target_locations")],
                             help=str("Additional Input locations. Separate "
-                                     "multiple input files with \",\"\nDefault: "
-                                     "" + self.script_path +
+                                     "multiple input files with spaces\n"
+                                     "Default: " + self.abs_path +
                                      "target_locations"))
 
         parser.add_argument('-o', "--output", type=str,
-                            default=str(os.getcwd() + "/LEAF_output/"),
+                            default=os.path.join(os.getcwd(), "LEAF_output/"),
                             help='Output directory location\nDefault: '
                                  './LEAF_output')
         try:
             parser.add_argument('-u', "--users", nargs='+',
                                 default=os.listdir("/home"),
-                                help='Users to include in output, separated by '
-                                     '\",\" (i.e. alice,bob,charlie). \nMUST be '
-                                     'in /home/ directory\nDefault: All users')
+                                help='Users to include in output, separated '
+                                     'by spaces (i.e. -u alice bob charlie). '
+                                     '\nMUST be in /home/ directory\n'
+                                     'Default: All users in /home/ directory')
         except FileNotFoundError:
             parser.add_argument('-u', "--users", nargs='+',
                                 default=[],
                                 help='Users to include '
-                                     'in output, separated by \",\" (i.e. alice,'
-                                     'bob,charlie). \nMUST be in /home/ '
+                                     'in output, separated by \",\" (i.e. '
+                                     'alice,bob,charlie). \nMUST be in /home/ '
                                      'directory\nDefault: All users')
 
         parser.add_argument('-c', "--categories", nargs='*', type=str,
                             default=self.all_cats,
-                            help='Explicit artifact categories to include  '
-                                 'during acquisition. \nCategories must be separated '
-                                 'by space, (i.e. -c network users apache). '
-                                 '\nFull List of built-in categories '
-                                 'includes: \n\t' + str(self.all_cats) +
+                            help='Explicit artifact categories to include '
+                                 'during acquisition. \nCategories must be '
+                                 'separated by space, (i.e. -c network users '
+                                 'apache).\nFull List of built-in categories '
+                                 'includes:'+list_to_str(self.all_cats, "\t") +
                                  '\nCategories are compatible with '
                                  'user-inputted files as long as they follow '
-                                 'the notation: \n\t# CATEGORY\n'
-                                 '\t/location1\n\t/location2 \n'
-                                 '\t.../location[n]\n\t# END CATEGORY '
-                                 '\nDefault: "all"')
+                                 'the notation:' + bColors.Yellow +
+                                 '\n\t# CATEGORY\n\t/location1\n\t/location2 '
+                                 '\n\t.../location[n]\n\t# END CATEGORY '
+                                 + bColors.ENDC + '\nDefault: "all"')
 
         parser.add_argument('-v', "--verbose", help='Output in verbose '
                                                     'mode, (may conflict with '
-                                                    'progress bar)\nDefault: False',
+                                                    'progress bar)'
+                                                    '\nDefault: False',
                             action='store_true')
 
         parser.add_argument('-s', "--save", help='Save the raw evidence '
@@ -269,53 +325,60 @@ class LEAFInfo():
 
         parser.add_argument('-y', "--yara", nargs='*',
                             default="do_not_include",
-                            help='Configure Yara IOC scanning. Select -y alone '
-                                 'to enable Yara scanning. Specify \'-y '
-                                 '/path/to/yara/\' to specify custom input location.'
-                                 '\nFor multiple inputs, use spaces between items, '
-                                 'i.e. \'-y rule1 rule2 rule_dir/\'\nDefault: None')
+                            help='Configure Yara IOC scanning. Select -y '
+                                 'alone to enable Yara scanning.\nSpecify \'-y '
+                                 '/path/to/yara/\' to specify custom input '
+                                 'location.\nFor multiple inputs, use spaces '
+                                 'between items,\ni.e. \'-y rulefile1.yar '
+                                 'rulefile2.yara rule_dir/\'\nAll yara files '
+                                 'must have \".yar\" or \".yara\" extension.'
+                                 '\nDefault: None')
         parser.add_argument('-yr', "--yara_recursive", nargs='*',
-                            default="do_not_include", help='Configure '
-                       'Recursive Yara IOC scanning. \nFor multiple inputs, '
-                       'use spaces between items, i.e. \'-yr rule1,'
-                       'rule2 rule_dir/\'. Directories in this list will '
-                       'be scanned recursively.\nCan be used in conjunction '
-                       'with the normal -y flag, but intersecting items '
-                       'will take recursive priority.\nDefault: None')
+                            default="do_not_include",
+                            help='Configure '
+                                 'Recursive Yara IOC scanning.\nFor multiple '
+                                 'inputs, use spaces between items,\ni.e. '
+                                 '\'-yr rulefile1.yar rulefile2.yara '
+                                 'rule_dir/\'.\nDirectories in this list will '
+                                 'be scanned recursively.\nCan be used in '
+                                 'conjunction with the normal -y flag,\nbut '
+                                 'intersecting directories will take '
+                                 'recursive priority.\nDefault: None')
+        # Ensure that the program is run in root
+        try:
+            if os.getuid() != 0:
+                raise RootNotDetected
+        except RootNotDetected as e:
+            print("Error:", e)
+            exit()
+
         # Compile the arguments
         args = parser.parse_args()
 
-        # Stores the arguments into static variables
-        # output_dir : string of output location (single value)
-        output_dir = args.output
-        # save : boolean whether to save directory of copied files
-        save = args.save
         self.raw = args.save
-        # verbose : boolean whether to use verbose output
-        verb = args.verbose
         self.verbose = args.verbose
-        # input_file : list of input files (files that have targets)
-        input_files = args.input
-        self.set_input_files(input_files)
+        self.set_input_files(args.input)
 
-        self.input_files = input_files
         # yara : whether or not to use yara scanning; optional list
-        # No "-y" --> "do_not_include"
-        # -y with no arguments --> [] --> use default rules
-        # -y a b c --> ["a", "b", "c"] --> use specific rules
         yara = args.yara
         # Same as -y flag but with recursive-available locations
         yara_rec = args.yara_recursive
+        # parse the inputted yara file locations
         self.set_yara(yara, yara_rec)
 
+        # Stores the arguments into static variables
+        output_dir = args.output
         # Formats the "output_dir" variable to have a trailing "/"
         # If the output directory is not listed from root, create the full path
         if output_dir[0] != "/":
-            output_dir = os.path.join(os.getcwd(), output_dir)
+            higher_wd = os.path.abspath("/".join(output_dir.split("/")[:-1]))
+            output_dir = os.path.join(higher_wd, output_dir.split("/")[-1])
         if output_dir[-1] != "/":
             output_dir = output_dir + "/"
 
         self.output_dir = output_dir
+        self.leaf_paths = [self.abs_path, self.script_path, self.output_dir]
+
         self.create_output_dir()
 
         self.set_users(args.users)
@@ -328,37 +391,35 @@ class LEAFInfo():
         self.read_input_files()
         # Creates forensic data output environment, and gets the Evidence
         # Directory and the Image Name from the created evidence location
-        self.create_evdc(output_dir)
+        self.create_evdc()
 
-        print("Arguments: ")
-        print("\tInput File(s):\t\t", self.input_files)
-        print("\tCompiled Targets File:\t", self.targets_file)
-        print("\tOutput Directory:\t", self.output_dir)
-        print("\tImage Name:\t\t", self.img_name)
-        print("\tSave raw?\t\t", self.raw)
-        print("\tScript Path:\t\t", self.script_path)
-        print("\tUser(s):\t\t", self.users_list)
-        print("\tCategories:\t\t", self.cats)
-        print("\tYara Scanning Enabled:\t", self.yara_scan)
+        if self.yara_scan_bool:
+            print("Note: Yara Scanning is still in development and will "
+                  "not parse in this version.")
         print()
 
     def set_users(self, in_users):
         # Checks each user and remove users that do not exist
-        for user in in_users:
-            if user not in os.listdir("/home/"):
-                print(f"Non-existent user, {user}. Removing...")
-                in_users.remove(user)
+        accepted_users = in_users
+        ### TODO: import user list from /etc/passwd
+        users_in_home = [uname.upper() for uname in os.listdir("/home")]
+
+        for i in range(len(in_users)):
+            userx = in_users[i-1]
+            if userx.upper() not in users_in_home:
+                print(f"Non-existent user, {userx}. Removing...")
+                accepted_users.remove(userx)
 
         # If all the users included were invalid
         # and removed, use the default users
         try:
-            if len(in_users) == 0:
+            if len(accepted_users) == 0:
                 raise ArgumentEmpty("users")
         except ArgumentEmpty as e:
             print("Error:", e)
-            in_users = os.listdir("/home")
+            accepted_users = os.listdir("/home")
 
-        self.users_list = in_users
+        self.users_list = accepted_users
 
     def set_cats(self, user_cats):
         cats = []
@@ -397,20 +458,18 @@ class LEAFInfo():
         # use the recursive method only
         yara_inputs["non-recurse"] = [item for item in yara_inputs[
             "non-recurse"] if item not in yara_inputs["recurse"]]
-        self.yara_all = yara_inputs
 
         # Scanning is enabled if either recursive or non-recursive is populated
-        self.yara_scan_bool = (yara_inputs["non-recurse"] != [] or
-                     yara_inputs["recurse"] != [])
+        self.yara_scan_bool = (self.yara_inputs["non-recurse"] != [] or
+                               self.yara_inputs["recurse"] != [])
         if self.yara_scan_bool:
-            yara_unrec = yara_inputs["non-recurse"]
-            yara_rec = yara_inputs["recurse"]
+            yara_unrec = self.yara_inputs["non-recurse"]
+            yara_rec = self.yara_inputs["recurse"]
             yara_files = []
-            yara_files.extend(self.parse_yaradir(yara_unrec, rec=False))
-            yara_files.extend(self.parse_yaradir(yara_rec, rec=True))
-            yara_files = list(set(yara_files))
+            self.parse_yaradir(yara_rec, rec=True)
+            self.parse_yaradir(yara_unrec, rec=False)
+            self.yara_files = list(set(self.yara_files))
             self.verbose_write(f"Parsing files: {yara_files}")
-            self.yara_files = yara_files
         else:
             self.yara_files = []
 
@@ -419,13 +478,12 @@ class LEAFInfo():
         for file in in_files:
             try:
                 if not os.path.isfile(file):
-                    self.verbose_write(f"Input file {file} does not exist. "
-                                 f"Removing...")
-                    raise DoesNotExistError(file)
+                    if self.verbose: raise DoesNotExistError(file)
+                    self.verbose_write(f"Removing...")
                 else:
                     input_files_paths.append(os.path.abspath(file))
             except DoesNotExistError as e:
-                print("Error: ", e)
+                self.verbose_write("Error: ", e)
         if len(input_files_paths) == 0:
             # If all the items got removed from the input list due to not
             # existing, use default file
@@ -434,12 +492,12 @@ class LEAFInfo():
         self.input_files = input_files_paths
 
     def create_output_dir(self):
-        print("\nCreating", self.output_dir + "....")
+        self.verbose_write("\nCreating", self.output_dir + "....")
         # If that directory does not exist, create it
         if not os.path.exists(self.output_dir):
             os.makedirs(self.output_dir, mode=775)
         elif self.verbose:
-            print("Path already exists. Continuing...\n")
+            self.verbose_write("Path already exists. Continuing...\n")
 
     def create_evdc(self):
         # Gets the time of execution to assign to the image name
@@ -447,8 +505,7 @@ class LEAFInfo():
         self.img_path = os.path.join(self.output_dir,
                                      str("LEAF_acquisition_" +
                                          str(current_time) + ".ISO"))
-
-        evidence_dir = os.path.join(self.output_dir, "evidence")
+        evidence_dir = os.path.join(self.output_dir, f"evidence{self.iter}")
         i = ""
         # If the evidence directory does not exist, create it
         if not os.path.exists(evidence_dir):
@@ -458,78 +515,70 @@ class LEAFInfo():
         # overwrite
         else:
             for i in range(1, 256):
-                i = str(i)
+                i = f"-{str(i)}"
                 if not os.path.exists(evidence_dir + i):
-                    os.makedirs(evidence_dir + i)
+                    os.makedirs(self.evidence_dir + i, mode=775)
                     break
         self.evidence_dir = evidence_dir + i + "/"
-        print("Creating evidence directory:", evidence_dir + "...")
-        print()
+        self.verbose_write(f"Creating evidence directory: "
+                           f"{self.evidence_dir}...")
 
     def read_input_files(self):
-        #in_file = os.path.join(self.output_dir, "temp_file")
-        # in_file, cats, output_dir, script_path, users
-        #with open(in_file, "w+") as f:
-        #    data = f.read()
-
-        # Write every target location stored in input_files_paths to a
-        # temporary file
-        #targets = data.split("\n")
+        # Write every target location stored in input_files to a
+        # temporary list
         targets = []
         for file in self.input_files:
             with open(file) as nextfile:
-                data = data + nextfile.read()
                 for line in nextfile:
-                    targets.append(line)
+                    if len(line.strip()) > 0:
+                        targets.append(line.strip())
 
-        # Parse the list of files based on category to the target_locations list
-        # in the output directory; remove the temp directory
+        # Write targets to a new file
         self.write_targets(targets)
-        #os.remove(str(self.output_dir + "temp_file"))
-        #return input_files_paths, targets_file
 
     def write_targets(self, targets):
         # Prepare the output file in the output directory
-        self.targets_file = os.path.join(self.output_dir, "target_locations")
-
+        self.targets_file = os.path.join(self.output_dir, f"target_locations")
         if os.path.exists(self.targets_file):
             # If the file does exist, name it with the soonest number 1, 2,...
             for i in range(1, 256):
                 i = str(i)
-                if not os.path.exists(self.read_target_file + i):
+                if not os.path.exists(self.targets_file + i):
                     # Rename the output targets file as necessary
-                    self.read_target_file = self.read_target_file + i
+                    self.iter = i
+                    self.targets_file = self.targets_file + self.iter
                     break
 
-        print("Creating target file,", self.targets_file + "...")
+        self.verbose_write(f"Creating target file, {self.targets_file} ...")
         # Begin to write to the target file
         f = open(self.targets_file, "w")
         # value to determine if files are in a sought category
         header_found = False
         # For each user, for each target line
         # (directory, file, header, trailer)
-        for user in self.users:
+        for user in self.users_list:
             for target in targets:
                 # If the line starts with "#", it is a header or a trailer
                 if target[0] == "#":
-                    # The current category is the last word in the header/trailer
-                    ### current_cat = target.split(' ')[-1][:-1].upper()
+                    # The current category is in the header/trailer
                     current_cat = target.split(' ')[-1].strip().upper()
-                    # If "END" is not in the line, this is the header of a category
+                    # If "END" is not in the line, this is the header of a
+                    # category
                     if target.split(" ")[1].upper() != "END":
-                        # If the header is in the category list, a header is found
+                        # If the header is in the category list, a header is
+                        # found
                         if current_cat in self.cats:
                             header_found = True
                     else:
-                        # Otherwise, if it is a trailer, the header is no longer
-                        # found
+                        # Otherwise, if it is a trailer, the header is no
+                        # longer found
                         header_found = False
                 elif target != "":
                     # If the line is not a header/trailer nor empty...
                     if header_found:
-                        # Write the line with replacing $USER with a user in a list
+                        # Write the line with replacing $USER with a user
                         new_target = target.replace("$USER", user)
-                        f.write(new_target)
+                        f.write(new_target + "\n")
 
         # Close the file after all writes and return the compiled target file
         f.close()
@@ -558,60 +607,48 @@ class LEAFInfo():
         pass
 
     def copy_files_main(self, New_LogFile):
-            """
-            Main handler for the copy file + metadata operations.
-            :param target_file: (str)   file of listed targets
-            :param evidence_dir: (str)  location of evidence directory
-            :param v: (bool)      Verbose output on or off
-            :param leaf_paths: (list)   list of protected locations used by LEAF
-            :return:
-            """
-            # target_file, evidence_dir, v, leaf_paths,
+        # Read all lines of the targets file and save to targets list
+        with open(self.targets_file) as f:
+            targets = f.readlines()
+        # Parse each line/location; uses tqdm to generate a progress bar
+        for i in tqdm(range(len(targets))):
+            # Removes any trailing whitespaces or special characters
+            line = targets[i].strip()
 
-            # Read all lines of the targets file and save to targets list
-            with open(self.targets_file) as f:
-                targets = f.readlines()
-            # Parse each line/location; uses tqdm to generate a progress bar
-            for i in tqdm(range(len(targets))):
-                # Removes any trailing whitespaces or special characters
-                line = targets[i].strip()
+            # If the path does not exist, raise the DoesNotExist error
+            try:
+                if not os.path.exists(line):
+                    if self.verbose: raise DoesNotExistError(line)
 
-                # If the path does not exist, raise the DoesNotExist error
-                try:
-                    if not os.path.exists(line):
-                        raise DoesNotExistError(line)
-
-                    # If the line is in protected LEAF paths, raise LEAFinPath Error
-                    elif any(l_path in line for l_path in self.leaf_paths):
-                        raise LEAFInPath(line)
-                    # Otherwise, if it is a valid path...
-                    else:
-                        # Get its partition location
-                        part = subprocess.check_output(f"df -T '{line}'",
-                                                       shell=True) \
-                            .decode('utf-8').split("\n")[1].split(" ")[0]
-                        # push the item to copy_item()
-                        if not any(l_path in line for l_path in
-                                   self.leaf_paths):
+                # If the line is in protected LEAF paths, raise LEAFinPath
+                elif any(l_path in line for l_path in self.leaf_paths):
+                    raise LEAFInPath(line)
+                # Otherwise, if it is a valid path...
+                else:
+                    # Get its partition location
+                    part = subprocess.check_output(f"df -T '{line}'",
+                                                   shell=True) \
+                        .decode('utf-8').split("\n")[1].split(" ")[0]
+                    # push the item to copy_item()
+                    if not any(l_path in line for l_path in
+                               self.leaf_paths):
+                        try:
                             self.copy_item(line, part, New_LogFile)
-                except DoesNotExistError as e:
-                    print("Error:", e, "\nContinuing...")
-                except LEAFInPath as e:
-                    print("Error:", e, "\nContinuing...")
+                        except FileNotFoundError as e:
+                            self.verbose_write(f"Cannot find file or directory,"
+                                               f" {line}. Continuing...")
+                            New_LogFile.new_errorlog(e, "copy_files_main")
+            except DoesNotExistError as e:
+                if self.verbose: print("Error:", e, "\nContinuing...")
+                New_LogFile.new_errorlog(e, "copy_files_main")
+            except LEAFInPath as e:
+                if self.verbose: print("Error:", e, "\nContinuing...")
+                New_LogFile.new_errorlog(e, "copy_files_main")
 
-            print("\n\n")
-            return New_LogFile
+        print("\n\n")
+        return New_LogFile
 
     def copy_item(self, src, part, logfile):
-        """
-        Copy each item from the source to the destination with incorporation
-        of debugfs to ensure the secure copy of file (inode) metadata.
-        :param src: (str)       file or directory that is being copied from
-        :param evdc_dir: (str)  evidence directory
-        :param part: (str)      partition that stores the files
-        :return:
-        """
-
         # The new item to be parsing; this will be the target location
         new_root = self.evidence_dir + src[1:]
 
@@ -636,34 +673,23 @@ class LEAFInfo():
             # Run debugfs to copy the inode data from the source to destination
             self.debugfs(src, new_root, part)
 
-            ### TODO: Test this out
             files_list = []
             dirs_list = []
             for root, dirs, files in os.walk(src):
-                for dir in dirs:
-                    dirs_list.extend(os.path.join(root, dir))
+                for dirx in dirs:
+                    dirs_list.append(os.path.join(root, dirx))
                 for file in files:
-                    files_list.extend(os.path.join(root, file))
+                    files_list.append(os.path.join(root, file))
 
-            for dir in dirs_list:
-                if src[-1] != "/":
-                    src = src + "/"
-                copy = f"mkdir --parents '" \
-                       f"{os.path.join(self.evidence_dir, dir)}'"
-                os.system(copy)
-                self.debugfs(src, new_root, part)
             for file in files_list:
-                self.copy_item(file, part, logfile)
-
-
-            """for filename in os.listdir(src):
-                # Each item in the directory will be run through copy_item()
-                # recursively with an updated source, as long as not in LEAF paths
-                if not any(l_path in os.path.join(src, filename) for l_path in
-                           self.leaf_paths):
-                    # copy_item(os.path.join(src, filename), evdc_dir, part, v,
-                    #          l_paths, logfile)
-                    self.copy_item(os.path.join(src, filename), part, logfile)"""
+                try:
+                    self.copy_item(file, part, logfile)
+                except KeyboardInterrupt:
+                    print("Exit triggered (^Z, ^C). Saving current progress...")
+                except FileNotFoundError as e:
+                    print(f"Cannot find file or directory, {file}. "
+                          f"Continuing...")
+                    logfile.new_errorlog(e, "copy_item")
         elif os.path.isfile(src):
             # If the source is a file, copy it to the latest target location
             copy = f"mkdir --parents " \
@@ -673,14 +699,18 @@ class LEAFInfo():
 
             copy = f"cp -p '{src}' '{new_root}'"
             os.system(copy)
-            check_int = self.checkIntegrity(src, new_root)
+            check_int = self.check_integrity(src, new_root)
             # Test if the source file and destination file have the same hash
             try:
                 # If False, raise NonMatchingHashes error
                 if not check_int[0]:
                     raise NonMatchingHashes(src, new_root)
             except NonMatchingHashes as e:
-                print("Error:", e)
+                self.verbose_write("Error:", e)
+                logfile.new_errorlog(e, "copy_item")
+            except TypeError as e:
+                self.verbose_write("Error:", e)
+                logfile.new_errorlog(e, "copy_item")
 
             # Use debugfs to copy each file's inode data over
             self.debugfs(src, new_root, part)
@@ -690,7 +720,7 @@ class LEAFInfo():
             except:
                 file_size = "NA"
             # Log the action
-            logfile.new_log(src, new_root, check_int[0], check_int[1],
+            logfile.new_log(src, new_root, check_int[1], check_int[2],
                             file_size)
             # return to previous recursive statement
             return
@@ -704,7 +734,7 @@ class LEAFInfo():
             else:
                 return
 
-    def checkIntegrity(self, s_file, d_file):
+    def check_integrity(self, s_file, d_file):
         """
         Check Integrity of the copied file against the original file.
         :param s_file: (str)    source (original) file
@@ -716,8 +746,9 @@ class LEAFInfo():
         # Parse each file
         for file in (s_file, d_file):
             # Do not attempt to hash link files
-            if os.path.islink(s_file):
-                return True
+            if os.path.islink(s_file) and file == s_file:
+                hashes.append("NA")
+                continue
             # Generating the hash for the file
             sha1 = hashlib.sha1()
             with open(file, 'rb') as f:
@@ -731,7 +762,7 @@ class LEAFInfo():
         else:
             # Otherwise, if hashes match, return true
             match = True
-        return (match, hashes[0], hashes[1])
+        return match, hashes[0], hashes[1]
 
     def debugfs(self, src, tgt, part):
         """
@@ -742,13 +773,6 @@ class LEAFInfo():
         :param part: (str)  partition name
         """
 
-        """ ### TODO: Test WHY I use [:-1] ?????
-        # Get the original item's inode identifier
-        orig_inode = subprocess.check_output(f"stat -c %i '{src}'",
-                                             shell=True).decode("utf-8")[:-1]
-        # Get the copied item's inode identifier
-        new_inode = subprocess.check_output(f"stat -c %i '{tgt}'",
-                                            shell=True).decode("utf-8")[:-1]"""
         # Get the original item's inode identifier
         orig_inode = subprocess.check_output(f"stat -c %i '{src}'",
                                              shell=True).decode(
@@ -767,23 +791,19 @@ class LEAFInfo():
 
     def get_image(self):
         print(f"Acquiring '{self.evidence_dir}'...")
-        os.system(f"tree -a '{self.evidence_dir}")
+        os.system(f"tree -a '{self.evidence_dir}'")
         print(f"Writing data to '{self.img_path}'")
         os.system(
-            f"mkisofs -max-iso9660-filenames -U -o '{self.evidence_dir}' "
-            f"'{self.output_dir}'")
+            f"mkisofs -max-iso9660-filenames -iso-level 4 -U -o '{self.img_path}' "
+            f"'{self.evidence_dir}'")
+        """for line in mkiso_log.split("\n"):
+            logfile.new_errorlog(line)"""
         print("Done!")
         self.getHash()
         if not self.raw:
             shutil.rmtree(self.evidence_dir)
 
     def getHash(self):
-        """
-        Check Integrity of the copied file against the original file.
-        :param s_file: (str)    source (original) file
-        :param d_file: (str)    destination (copied) file
-        :return: (bool) Whether or not the file hashes match
-        """
         # Generating the hash for the file
         sha1 = hashlib.sha1()
         with open(self.img_path, 'rb') as f:
@@ -791,15 +811,36 @@ class LEAFInfo():
             sha1.update(buf)
         self.iso_hash = sha1.hexdigest()
 
-    def verbose_write(self, prnt):
+    def verbose_write(self, *prnt):
+        out = ""
         if self.verbose:
-            print(prnt)
+            for item in prnt:
+                out = f"{out} {item}"
+            print(out)
 
     def __str__(self):
         out = ""
-        for i in self.all_args:
-            out = out + str(i) + "\n"
+        """for _, var in vars(self).items():
+            out += str(var)"""
+
+        out = out + f"\nArguments:\n\t" \
+                    f"Input File(s):\t\t{self.input_files}\n\t" \
+                    f"Output Directory:\t{self.output_dir}\n\t" \
+                    f"Evidence Directory:\t{self.evidence_dir}\n\t" \
+                    f"Compiled Targets File:\t{self.targets_file}\n\t" \
+                    f"Image Name:\t\t{self.img_path}\n\t" \
+                    f"Save raw?\t\t{self.raw}\n\t" \
+                    f"User(s):\t\t{self.users_list}\n\t" \
+                    f"Categories:\t\t{self.cats}\n\t" \
+                    f"Yara Scanning Enabled:\t{self.yara_scan_bool}"
         return out
+
+
+def list_to_str(value, pre=""):
+    out = ""
+    for item in value:
+        out = f"{out}\n{pre}{item}"
+    return out
 
 
 def main():
@@ -816,43 +857,37 @@ def main():
     # Gets the the argparse values
     LEAFObj = LEAFInfo()
     LEAFObj.get_params()
-
-    # Ensure that the program is run in root
-    try:
-        if os.getuid() != 0:
-            raise RootNotDetected
-    except RootNotDetected as e:
-        print("Error:", e)
-        exit()
+    print(LEAFObj)
 
     # Initialize a Log File object
-    LogFile = Log(save_loc=LEAFObj.script_path)
-
-    # Create a command-run log
-    LogFile.new_commandlog(LEAFObj)
+    LogFile = Log(save_loc=LEAFObj.output_dir)
 
     ### Start Clone/Copy Operations
 
     # Runs copy_files() to read the targeted locations file and copy
     # appropriate locations to the evidence directory
-    ###copy_files(parameters["targets_file"], parameters[
-    ###    "evidence_directory"], parameters["verbose"], leaf_paths, LogFile)
     LEAFObj.copy_files_main(LogFile)
 
     # Runs get_image() to create the image file for the evidence and hash
     # the image
     LEAFObj.get_image()
-    LogFile.write_to_file()
 
-    #if parameters["yara"]:
-    #   scan_yara(str(parameters["script_path"] + "yara_rules/"))
+    # Create a command-run log
+    LogFile.new_commandlog(LEAFObj)
+
+    # Write the logging to file
+    print("Saving acquisition log...")
+    LogFile.write_to_file()
+    print("Saving error log...")
+    LogFile.write_to_file(log_type="Err")
+
     # Trailer
     print()
     print(f"Acquisition completed.\n\tFilename: {LEAFObj.img_path} "
           f"\n\tSHA1 Hash: {LEAFObj.iso_hash}")
     print()
 
-    end_time = datetime.datetime.now()
+    end_time = datetime.now()
     e = end_time - start_time
     # Create time elapsed
     print(f"Processing Time: {e}")
