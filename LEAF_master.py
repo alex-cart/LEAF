@@ -195,7 +195,7 @@ class LEAFInfo():
         self.input_files = [os.path.join(self.abs_path, "target_locations")]
         self.targets_file = os.path.join(self.abs_path, "target_locations")
         self.all_cats = ["APPLICATIONS", "EXECUTIONS", "LOGS", "MISC",
-                         "NETWORK", "STARTUP", "SERVICES", "SYSTEM",
+                         "NETWORK", "SHELL", "STARTUP", "SERVICES", "SYSTEM",
                          "TRASH", "USERS"]
         self.cats = ["APPLICATIONS", "EXECUTIONS", "LOGS", "MISC", "USERS",
                      "NETWORK", "STARTUP", "SERVICES", "SYSTEM", "TRASH"]
@@ -219,29 +219,29 @@ class LEAFInfo():
 
     def get_params(self):
         """
-            Main handler for interpreting user input information creating the
-            forensic environment for output items.
-            Assigns the following class attributes:
-                input_files : list of "targets" files the user chooses to
-                            include
-                targets_file : Location of the compiled targets file
-                cats : Categories to parse
-                output_dir : Output directory for all evidence and
-                            LEAF-generated files
-                img_path : Name and location of the ISO Image File
-                raw : Whether or not to save the raw evidence clone directory
-                script_path : Path to the LEAF scripts
-                users_list : List of users to parse
-                users_dict : dictionary of user information for inputted users
-                all_users : dictionary of all user information on the host
-                primary_users : dictionary of all non-service user information
-                groups : groups present on the system
-                evidence_dir : Evidence Directory (out_dir/evdc_dir)
-                yara_scan_bool : whether or not yara scanning is enabled
-                get_ownership : list of locations to parse for user-owned files
-                yara_files : list of yara files from which rules will be pulled
-                leaf_paths : list of protected locations that must not be
-                            acquired
+        Main handler for interpreting user input information creating the
+        forensic environment for output items.
+        Assigns the following class attributes:
+            input_files : list of "targets" files the user chooses to
+                        include
+            targets_file : Location of the compiled targets file
+            cats : Categories to parse
+            output_dir : Output directory for all evidence and
+                        LEAF-generated files
+            img_path : Name and location of the ISO Image File
+            raw : Whether or not to save the raw evidence clone directory
+            script_path : Path to the LEAF scripts
+            users_list : List of users to parse
+            users_dict : dictionary of user information for inputted users
+            all_users : dictionary of all user information on the host
+            primary_users : dictionary of all non-service user information
+            groups : groups present on the system
+            evidence_dir : Evidence Directory (out_dir/evdc_dir)
+            yara_scan_bool : whether or not yara scanning is enabled
+            get_ownership : list of locations to parse for user-owned files
+            yara_files : list of yara files from which rules will be pulled
+            leaf_paths : list of protected locations that must not be
+                        acquired
             """
 
         # Creates argparse parser
@@ -406,7 +406,7 @@ class LEAFInfo():
         self.create_output_dir()
 
         self.get_all_users()
-        if len(self.users_list) == 0:
+        if len(args.users) == 0:
             in_users = list(self.primary_users.keys())
         else:
             in_users = args.users
@@ -440,7 +440,7 @@ class LEAFInfo():
         for user in in_users:
             for uname in self.all_users:
                 if user.upper() == uname.upper():
-                    output_users[uname] = all_list[uname]
+                    output_users[uname] = self.all_users[uname]
         self.users_dict = output_users
         self.users_list = list(self.users_dict.keys())
 
@@ -599,10 +599,16 @@ class LEAFInfo():
         self.groups = groups_dict
 
     def get_file_ownership(self):
-        for root_target in self.get_ownership:
-            for user in self.users_list:
-                os.system(f"find {root_target} -user {user} >> "
-                          f"{self.targets_file}")
+        if len(self.get_ownership) > 0:
+            self.cats.append("OWNERSHIP")
+            with open(self.targets_file, "a") as f:
+                f.write("# OWNERSHIP")
+            for root_target in self.get_ownership:
+                for user in self.users_list:
+                    os.system(f"find {root_target} -user {user} >> "
+                              f"{self.targets_file}")
+            with open(self.targets_file, "a") as f:
+                f.write("# END OWNERSHIP")
 
     def read_input_files(self):
         # Write every target location stored in input_files to a
@@ -735,6 +741,7 @@ class LEAFInfo():
 
     def copy_item(self, src, part, logfile):
         # The new item to be parsing; this will be the target location
+        ### TODO : use os.join
         new_root = self.evidence_dir + src[1:]
 
         if any(l_path in src for l_path in self.leaf_paths):
@@ -861,18 +868,15 @@ class LEAFInfo():
 
         # Get the original item's inode identifier
         orig_inode = subprocess.check_output(f"stat -c %i '{src}'",
-                                             shell=True).decode(
-            "utf-8").strip()
+                                        shell=True).decode("utf-8").strip()
         # Get the copied item's inode identifier
         new_inode = subprocess.check_output(f"stat -c %i '{tgt}'",
                                             shell=True).decode("utf-8").strip()
-        # Copy the inode data associated with the source file to the copied file
-        if self.verbose:
-            debug_cmd = f"debugfs -wR \"copy_inode <{orig_inode}> <{new_inode}>\"" \
-                        f" {part}"
-        else:
-            debug_cmd = f"debugfs -wR \"copy_inode <{orig_inode}> <{new_inode}>\"" \
-                        f" {part} > /dev/null 2>&1"
+        # Copy the inode data of the source file to the copied file
+        debug_cmd = f"debugfs -wR \"copy_inode <{orig_inode}> <" \
+                    f"{new_inode}>\" {part}"
+        if not self.verbose:
+            debug_cmd = debug_cmd + " > /dev/null 2>&1"
         os.system(debug_cmd)
 
     def get_image(self):
@@ -882,8 +886,6 @@ class LEAFInfo():
         os.system(
             f"mkisofs -max-iso9660-filenames -iso-level 4 -U -o '{self.img_path}' "
             f"'{self.evidence_dir}'")
-        """for line in mkiso_log.split("\n"):
-            logfile.new_errorlog(line)"""
         print("Done!")
         self.getHash()
         if not self.raw:
