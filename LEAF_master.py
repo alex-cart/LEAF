@@ -38,7 +38,7 @@ class bColors:
 
 
 class Log:
-    def __init__(self, save_loc=str(os.getcwd() + "/LEAF_output/")):
+    def __init__(self, save_loc=os.path.join(os.getcwd(), "LEAF_output/")):
         """
         Create a new log session for logging file cloning operations and
         command issues.
@@ -741,8 +741,7 @@ class LEAFInfo():
 
     def copy_item(self, src, part, logfile):
         # The new item to be parsing; this will be the target location
-        ### TODO : use os.join
-        new_root = self.evidence_dir + src[1:]
+        new_root = os.path.join(self.evidence_dir, src[1:])
 
         if any(l_path in src for l_path in self.leaf_paths):
             self.verbose_write(f"Skipping {src}: LEAF in Path")
