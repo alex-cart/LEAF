@@ -210,6 +210,7 @@ class LEAFInfo():
         self.yara_inputs = {"recurse": [], "non-recurse": []}
         self.yara_files = []
         self.yara_scan_bool = False
+        self.yara_targets = []
         self.verbose = False
         self.raw = False
         self.get_ownership = []
@@ -336,7 +337,7 @@ class LEAFInfo():
                                                  'directory\nDefault: False',
                             action='store_true')
 
-        parser.add_argument('-g', "--get_ownership", nargs='*',
+        parser.add_argument('-g', "--get_file_by_owner", nargs='*',
                             help='Get files and directories owned by included '
                                  'users.\nEnabling this will '
                                  'increase parsing time.\nUse -g '
@@ -412,13 +413,13 @@ class LEAFInfo():
             in_users = args.users
         self.set_users(in_users)
 
-        if args.get_ownership == []:
+        if args.get_file_by_owner == []:
             self.get_ownership = ["/"]
         elif args.get_ownership == "disabled":
             self.get_ownership = []
         else:
             self.get_ownership = [os.path.abspath(loc) for loc in
-                                  args.get_ownership]
+                                  args.get_file_by_owner]
 
         user_cats = [x.upper() for x in args.categories]
         self.set_cats(user_cats)
@@ -467,32 +468,27 @@ class LEAFInfo():
         self.cats = cats
 
     def set_yara(self, yara, yara_rec):
-        yara_inputs = {"non-recurse": [], "recurse": []}
         # Yara data [] means the flag was specified, but no paths
         # were inputted. "do_not_include" means that flag was not specified
-        for input_save in [[yara, yara_inputs["non-recurse"]],
-                           [yara_rec, yara_inputs["recurse"]]]:
-            # If yara was specified (empty list)
-            if len(input_save[0]) == 0:
-                input_save[1].append(str(self.script_path) + "/yara_rules/")
-            elif "do_not_include" not in input_save[0]:
-                input_save[1].extend(input_save[0])
-        # If non-recursive parsing and recursive parsing are the same targets,
-        # use the recursive method only
-        yara_inputs["non-recurse"] = [item for item in yara_inputs[
-            "non-recurse"] if item not in yara_inputs["recurse"]]
-
-        # Scanning is enabled if either recursive or non-recursive is populated
+        temp = []
+        for yara_type in [yara, yara_rec]:
+            if len(yara_type) == 0:
+                temp.append([os.path.join(str(self.script_path),
+                                          "yara_rules\\")])
+            elif "do_not_include" in yara_type:
+                temp.append([])
+            else:
+                temp.append(yara_type)
+        self.yara_inputs["non-recurse"] = temp[0]
+        self.yara_inputs["recurse"] = temp[1]
         self.yara_scan_bool = (self.yara_inputs["non-recurse"] != [] or
                                self.yara_inputs["recurse"] != [])
+
         if self.yara_scan_bool:
-            yara_unrec = self.yara_inputs["non-recurse"]
-            yara_rec = self.yara_inputs["recurse"]
-            yara_files = []
-            self.parse_yaradir(yara_rec, rec=True)
-            self.parse_yaradir(yara_unrec, rec=False)
+            self.parse_yaradir(self.yara_inputs["recurse"], rec=True)
+            self.parse_yaradir(self.yara_inputs["non-recurse"], rec=False)
             self.yara_files = list(set(self.yara_files))
-            self.verbose_write(f"Parsing files: {yara_files}")
+            self.yara_files.sort()
         else:
             self.yara_files = []
 
@@ -680,21 +676,33 @@ class LEAFInfo():
                 if rec:
                     for root, dirs, files in os.walk(item):
                         for file in files:
-                            if ".yar" in item[-5:].lower():
+                            if ".yar" in file[-5:].lower():
                                 self.yara_files.append(os.path.join(root,
                                                                     file))
                 else:
                     self.yara_files.extend(
                         [os.path.join(item, f) for f in os.listdir(
                             item) if os.path.isfile(os.path.join(item, f)) and
-                         ".yar" in item[-5:].lower()])
+                         ".yar" in f[-5:].lower()])
             elif os.path.isfile(item) and ".yar" in item[-5:].lower():
                 self.yara_files.append(item)
 
-    def run_yara(self, yara_files):
-        # what is the target??
-        # for file in yara_file, run yara [rule] [target] > output dir
-        pass
+    def run_yara(self, target="$USERHOME"):
+        ### do this after creating env, and after writing target files
+        if target == "$USERHOME":
+            for user in self.users_dict:
+                user_home = self.users_dict[user]["home"]
+                for rule in self.yara_files:
+                    ### TODO : check this please
+                    self.yara_targets.extend(subprocess.check_output(f"yara -r"
+                                             f" {rule} {user_home}").split(
+                                             "\n").strip())
+        # lets assume that target file was already written, cats removed
+        with open(self.targets_file, "a") as f:
+            for file in self.yara_targets:
+                if os.path.exists(file):
+                    if os.path.isfile(file):
+                        f.write(file + "\n")
 
     def copy_files_main(self, New_LogFile):
         # Read all lines of the targets file and save to targets list

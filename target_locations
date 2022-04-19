@@ -10,6 +10,19 @@
 /var/lib/dpkg/
 /var/lib/systemd/coredump
 $USERHOME/.config/autostart/
+$USERHOME/.thunderbird/
+$USERHOME/.mozilla-thunderbird
+$USERHOME/.mozilla/Firefox/
+$USERHOME/.config/Opera
+$USERHOME/.cache/mozilla/
+$USERHOME/.cache/sublime-text/
+$USERHOME/.cache/sublime-text-3/
+/usr/bin/google-chrome
+$USERHOME/.config/google-chrome
+/etc/httpd/
+/etc/apache2/
+/var/www/
+/opt/lampp/
 # END APPLICATIONS
 # EXECUTIONS
 /root/.bash_history
@@ -89,6 +102,9 @@ $USERHOME/.viminfo
 /etc/crontab/
 /var/log/xferlog
 /var/log/pureftp.log
+/etc/cron*
+/var/spool/atjobs
+/etc/anacron
 # END SERVICES
 # SHELL
 $USERHOME/.bash_history
@@ -117,6 +133,7 @@ $USERHOME/.zsh_sessions
 /etc/rcS.d/
 /lib/systemd/system/
 /etc/systemd/system/
+/usr/lib/systemd/system
 # END STARTUP
 # SYSTEM
 /boot/grub/
@@ -171,4 +188,5 @@ $USERHOME/.
 /etc/group
 /etc/passwd
 /etc/shadow
+/etc/sudoers
 # END USERS
