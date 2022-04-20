@@ -8,8 +8,8 @@ Linux Evidence Acquisition Framework (LEAF) acquires artifacts and evidence from
 ## Usage 
 ```
 LEAF_master.py [-h] [-i INPUT [INPUT ...]] [-o OUTPUT] [-u USERS [USERS ...]] [-c CATEGORIES [CATEGORIES ...]] [-v]
-                      [-s] [-g [GET_OWNERSHIP [GET_OWNERSHIP ...]]] [-y [YARA [YARA ...]]]
-                      [-yr [YARA_RECURSIVE [YARA_RECURSIVE ...]]]
+                      [-s] [-g [GET_FILE_BY_OWNER [GET_FILE_BY_OWNER ...]]] [-y [YARA [YARA ...]]]
+                      [-yr [YARA_RECURSIVE [YARA_RECURSIVE ...]]] [-yd [YARA_DESTINATIONS [YARA_DESTINATIONS...]]]
 
 LEAF (Linux Evidence Acquisition Framework) - Cartware
      ____        _________    ___________   __________ 
@@ -17,7 +17,7 @@ LEAF (Linux Evidence Acquisition Framework) - Cartware
    /   /       /   /____    /  /___/   /  /   /____  
   /   /       /   _____/  /   ____    /  /   _____/
  /   /_____  /   /_____  /   /   /   /  /   /      
-/_________/ /_________/ /___/   /___/  /___/          v1.9
+/_________/ /_________/ /___/   /___/  /___/          v2.0
 ```
 
 Process Ubuntu 20.04/Debian file systems for forensic artifacts, extract important data, 
@@ -84,6 +84,10 @@ optional arguments:
                         Can be used in conjunction with the normal -y flag,
                         but intersecting directories will take recursive priority.
                         Default: None
+  -yd [YARA_DESTINATIONS [YARA_DESTINATIONS...]], --yara_destinations [YARA_DESTINATIONS [YARA_DESTINATIONS...]]
+                        Destination to run yara files against. 
+                        Separate multiple targets with a space.(i.e. /home/alice/ /bin/star/)
+                        Default: All user directories
 ```
 ## Example Usages:
 ```
@@ -91,7 +95,7 @@ To use default arguments [this will use default input file (./target_locations),
 	LEAF_main.py
 
 All arguments:
-	LEAF_main.py -i /home/alice/Desktop/customfile1.txt -o /home/alice/Desktop/ExampleOutput/ -c logs startup services apache -u alice bob charlie -s -v -y /path/to/yara_rule1.yar -yr /path2/to/yara_rules/ -g /etc/
+	LEAF_main.py -i /home/alice/Desktop/customfile1.txt -o /home/alice/Desktop/ExampleOutput/ -c logs startup services apache -u alice bob charlie -s -v -y /path/to/yara_rule1.yar -yr /path2/to/yara_rules/ -yd /home/frank -g /etc/
 
 To specify usernames, categories, and yara files:
 	LEAF_main.py -u alice bob charlie -c applications executions users -y /home/alice/Desktop/yara1.yar /home/alice/Desktop/yara2.yar
