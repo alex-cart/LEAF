@@ -1,4 +1,4 @@
-#!/usr/bin/python
+#!/usr/bin/python3
 import pandas as pd
 from extensions.errorhandling import *
 import os
@@ -63,6 +63,7 @@ class Log:
                                              "Yara_Scanning", "Yara_Files"])
 
         self.err_log = pd.DataFrame(columns=["Time", "Error", "Function"])
+        self.yara_log = pd.DataFrame(columns=["Time", "Rule_Run", "File_Hit"])
 
     def new_log(self, src_name, dst_name, src_hash, dst_hash, size=0):
         """
@@ -95,8 +96,10 @@ class Log:
             "Image_Name": leaf_obj.img_path,
             "Verbose": leaf_obj.verbose,
             "Save_RawData": leaf_obj.raw,
-            "Yara_Scanning": leaf_obj.yara_scan_bool,
-            "Yara_Files": str(leaf_obj.yara_files)
+            "Yara_Scanning_Enabled": leaf_obj.yara_scan_bool,
+            "Yara_Files": str(leaf_obj.yara_files),
+            "Yara_Destinations": str(leaf_obj.yara_destinations),
+            "Files_by_Ownership": str(leaf_obj.get_file_by_owner)
         }
         self.update_df(new_cmdlog, log_type="Cmd")
         self.write_to_file(log_type="Cmd")
@@ -107,7 +110,15 @@ class Log:
             "Error": e,
             "Function": f
         }
-        self.update_df(new_errlog, log_type="Err")
+        self.update_df(new_errlog, log_type="Error")
+
+    def new_yaralog(self, rule_name, file_path):
+        new_yaralog = {
+            "Time": datetime.now().strftime("%Y-%m-%d_%H-%M-%S"),
+            "Rule_Run": rule_name,
+            "File_Hit": file_path
+        }
+        self.update_df(new_yaralog, log_type="Yara")
 
     def update_df(self, new_log, log_type="File"):
         if log_type == "File":
@@ -121,25 +132,44 @@ class Log:
                                    index=[0])
             self.cmd_log = pd.concat([self.cmd_log, new_log],
                                      ignore_index=True)
-        elif log_type == "Err":
+        elif log_type == "Error":
             new_log = pd.DataFrame(new_log, columns=list(self.err_log.columns),
                                    index=[0])
             self.err_log = pd.concat([self.err_log, new_log],
                                      ignore_index=True)
+        elif log_type == "Yara":
+            new_log = pd.DataFrame(new_log, columns=list(
+                self.yara_log.columns), index=[0])
+            self.yara_log = pd.concat([self.yara_log, new_log],
+                                      ignore_index=True)
 
     def write_to_file(self, fname="", log_type="File"):
         floc = self.save_loc
+
         if fname == "":
             fname = self.log_fname + ".csv"
 
-        if log_type == "File":
+        log_types_dict = {
+            "File": self.full_log,
+            "Cmd": self.cmd_log,
+            "Error": self.cmd_log,
+            "Yara": self.yara_log
+        }
+        write_log = log_types_dict[log_type]
+        if log_type != "File":
+            fname = self.log_fname + "_" + log_type + "Log.csv"
+
+        """if log_type == "File":
             write_log = self.full_log
         elif log_type == "Cmd":
-            fname = self.log_fname + "_CommandData.csv"
+            fname = self.log_fname + "_CommandLog.csv"
             write_log = self.cmd_log
         elif log_type == "Err":
             fname = self.log_fname + "_ErrorLog.csv"
             write_log = self.err_log
+        elif log_type == "Yara":
+            fname = self.log_fname + "_YaraLog.csv"
+            write_log = self.yara_log"""
 
         write_path = str(floc + fname)
         try:
@@ -180,7 +210,7 @@ class LEAFInfo():
             yara_scan_bool (bool)   : whether or not yara is enabled
             raw (bool)          : whether or not to save file clones in
                                     directory (evidence_dir)
-            get_ownership (list): list of locations to parse for user-owned
+            get_file_by_owner (list): list of locations to parse for user-owned
                                     files
             iter (str)          : iterable value to associate evidence_dir
                                     and targets_file
@@ -211,9 +241,10 @@ class LEAFInfo():
         self.yara_files = []
         self.yara_scan_bool = False
         self.yara_targets = []
+        self.yara_destinations = ["$USERHOME"]
         self.verbose = False
         self.raw = False
-        self.get_ownership = []
+        self.get_file_by_owner = []
         self.iter = ""
         self.leaf_paths = [self.script_path, self.abs_path, self.output_dir]
         self.iso_hash = ""
@@ -239,7 +270,7 @@ class LEAFInfo():
             groups : groups present on the system
             evidence_dir : Evidence Directory (out_dir/evdc_dir)
             yara_scan_bool : whether or not yara scanning is enabled
-            get_ownership : list of locations to parse for user-owned files
+            get_file_by_owner : list of locations to parse for user-owned files
             yara_files : list of yara files from which rules will be pulled
             leaf_paths : list of protected locations that must not be
                         acquired
@@ -248,23 +279,23 @@ class LEAFInfo():
         # Creates argparse parser
         parser = argparse.ArgumentParser(
             description=(bColors.Green +
-                         'LEAF (Linux Evidence Acquisition Framework) - '
-                         'Cartware\n'
-                         '     ____        _________    ___________   __________ \n'
-                         '    /   /       /   _____/   /  ____    /  /   ______/\n'
-                         '   /   /       /   /____    /  /___/   /  /   /____  \n'
-                         '  /   /       /   _____/  /   ____    /  /   _____/\n'
-                         ' /   /_____  /   /_____  /   /   /   /  /   /      \n'
-                         '/_________/ /_________/ /___/   /___/  /___/          v1.9\n\n' +
-                         bColors.ENDC +
-                         'Process Ubuntu 20.04/Debian file systems for forensic '
-                         'artifacts, extract important data, \nand export '
-                         'information to an ISO9660 file. Compatible with EXT4 '
-                         'file system and common \nlocations on Ubuntu 20.04 '
-                         'operating system.\nSee help page for more '
-                         'information.\nSuggested usage: Do not run from LEAF/ '
-                         'directory'
-                         + bColors.ENDC),
+             'LEAF (Linux Evidence Acquisition Framework) - '
+             'Cartware\n'
+             '     ____        _________    ___________   __________ \n'
+             '    /   /       /   _____/   /  ____    /  /   ______/\n'
+             '   /   /       /   /____    /  /___/   /  /   /____  \n'
+             '  /   /       /   _____/  /   ____    /  /   _____/\n'
+             ' /   /_____  /   /_____  /   /   /   /  /   /      \n'
+             '/_________/ /_________/ /___/   /___/  /___/          v2.0\n\n' +
+             bColors.ENDC +
+             'Process Ubuntu 20.04/Debian file systems for forensic '
+             'artifacts, extract important data, \nand export '
+             'information to an ISO9660 file. Compatible with EXT4 '
+             'file system and common \nlocations on Ubuntu 20.04 '
+             'operating system.\nSee help page for more '
+             'information.\nSuggested usage: Do not run from LEAF/ '
+             'directory'
+             + bColors.ENDC),
             epilog="Example Usages:\n\n"
                    "To use default arguments [this will use "
                    "default input file (./target_locations), users ("
@@ -369,19 +400,23 @@ class LEAFInfo():
                                  'conjunction with the normal -y flag,\nbut '
                                  'intersecting directories will take '
                                  'recursive priority.\nDefault: None')
-        # Ensure that the program is run in root
-        try:
-            if os.getuid() != 0:
-                raise RootNotDetected
-        except RootNotDetected as e:
-            print("Error:", e)
-            exit()
+
+        parser.add_argument('-yd', "--yara_destinations", nargs='+',
+                            default=["$USERHOME"],
+                            help='Destination to run yara files against. '
+                                 'Separate multiple targets with a space. '
+                                 '\n(i.e. /home/alice/ /bin/star/)'
+                                 '\nDefault: All user directories')
 
         # Compile the arguments
         args = parser.parse_args()
+        return args
 
+    def compile_params(self, args):
         self.raw = args.save
         self.verbose = args.verbose
+        self.yara_destinations = args.yara_destinations
+
         self.set_input_files(args.input)
 
         # yara : whether or not to use yara scanning; optional list
@@ -414,12 +449,12 @@ class LEAFInfo():
         self.set_users(in_users)
 
         if args.get_file_by_owner == []:
-            self.get_ownership = ["/"]
-        elif args.get_ownership == "disabled":
-            self.get_ownership = []
+            self.get_file_by_owner = ["/"]
+        elif args.get_file_by_owner == "disabled":
+            self.get_file_by_owner = []
         else:
-            self.get_ownership = [os.path.abspath(loc) for loc in
-                                  args.get_file_by_owner]
+            self.get_file_by_owner = [os.path.abspath(loc) for loc in
+                                      args.get_file_by_owner]
 
         user_cats = [x.upper() for x in args.categories]
         self.set_cats(user_cats)
@@ -432,8 +467,9 @@ class LEAFInfo():
         self.create_evdc()
 
         if self.yara_scan_bool:
-            print("Note: Yara Scanning is still in development and will "
-                  "not parse in this version.")
+            print("Note: Yara Scanning is still in its beta phase. Please "
+                  "report any problems to the GitHub page.")
+            #self.run_yara(targets=self.yara_destinations)
         print()
 
     def set_users(self, in_users):
@@ -474,7 +510,7 @@ class LEAFInfo():
         for yara_type in [yara, yara_rec]:
             if len(yara_type) == 0:
                 temp.append([os.path.join(str(self.script_path),
-                                          "yara_rules\\")])
+                                          "yara_rules/")])
             elif "do_not_include" in yara_type:
                 temp.append([])
             else:
@@ -595,11 +631,11 @@ class LEAFInfo():
         self.groups = groups_dict
 
     def get_file_ownership(self):
-        if len(self.get_ownership) > 0:
+        if len(self.get_file_by_owner) > 0:
             self.cats.append("OWNERSHIP")
             with open(self.targets_file, "a") as f:
                 f.write("# OWNERSHIP")
-            for root_target in self.get_ownership:
+            for root_target in self.get_file_by_owner:
                 for user in self.users_list:
                     os.system(f"find {root_target} -user {user} >> "
                               f"{self.targets_file}")
@@ -687,24 +723,71 @@ class LEAFInfo():
             elif os.path.isfile(item) and ".yar" in item[-5:].lower():
                 self.yara_files.append(item)
 
-    def run_yara(self, target="$USERHOME"):
+    def run_yara(self, New_LogFile):
+        targets = self.yara_destinations
+        # Installs yara if it does not currently exist
+        yara_exists = (subprocess.check_output("whereis yara",
+                                               shell=True)).decode("utf-8")
+        if len(yara_exists.split(":")[1]) < 2:
+            self.verbose_write("ERROR: Yara not found. Installing...")
+            # If the path of yara is less than 2, it probably does not exist
+            # and needs to be installed
+            os.system("sudo apt install yara")
+
+        self.verbose_write(str("Yara installed and up-to-date. Version: " +
+                               (subprocess.check_output('yara --version',
+                                shell=True)).decode('utf-8')))
+
         ### do this after creating env, and after writing target files
-        if target == "$USERHOME":
-            for user in self.users_dict:
-                user_home = self.users_dict[user]["home"]
+        for target in targets:
+            if os.path.isdir(target) and target[-1].strip() == "/":
+                target = target.strip()[:-1]
+            if target == "$USERHOME":
+                for user in self.users_dict:
+                    user_home = self.users_dict[user]["home"]
+                    for rule in self.yara_files:
+                        try:
+                            scanned_items = (subprocess.check_output(
+                                f"yara -r {rule} {user_home}",
+                                shell=True,
+                                stderr=subprocess.STDOUT)).decode(
+                                "utf-8").split("\n")
+                            self.yara_targets.extend(scanned_items)
+                            self.verbose_write(f"YARA found {scanned_items}")
+                            New_LogFile.new_yaralog()
+                        except subprocess.CalledProcessError as e:
+                            continue
+            elif os.path.exists(target):
                 for rule in self.yara_files:
-                    ### TODO : check this please
-                    self.yara_targets.extend(subprocess.check_output(f"yara -r"
-                                             f" {rule} {user_home}").split(
-                                             "\n").strip())
+                    try:
+                        self.verbose_write(f"Running: yara -r {rule} {target}")
+                        scanned_items = (subprocess.check_output(
+                            f"yara -r {rule} {target}",
+                            shell=True,stderr=subprocess.STDOUT)).decode(
+                            "utf-8").split("\n")
+                        self.yara_targets.extend(scanned_items)
+                        self.verbose_write(f"YARA found {scanned_items}")
+                    except subprocess.CalledProcessError as e:
+                        continue
+        yara_targets_temp = []
+        for yara_file in self.yara_targets:
+            if yara_file:
+                yara_info = [yara_file.split(" ")[0],
+                             "".join(yara_file.split(" ")[1:])]
+                New_LogFile.new_yaralog(yara_info[0], yara_info[1])
+                yara_targets_temp.append(yara_info[1])
+        self.yara_targets = yara_targets_temp
+
         # lets assume that target file was already written, cats removed
         with open(self.targets_file, "a") as f:
             for file in self.yara_targets:
                 if os.path.exists(file):
-                    if os.path.isfile(file):
-                        f.write(file + "\n")
+                    f.write(file + "\n")
 
     def copy_files_main(self, New_LogFile):
+        """
+        Main handler for the copy + clone operation
+        """
         # Read all lines of the targets file and save to targets list
         with open(self.targets_file) as f:
             targets = f.readlines()
@@ -748,6 +831,10 @@ class LEAFInfo():
         return New_LogFile
 
     def copy_item(self, src, part, logfile):
+        """
+        Clones items from source to the class attribute destination; then
+        logs the cloning operation in a log file
+        """
         # The new item to be parsing; this will be the target location
         new_root = os.path.join(self.evidence_dir, src[1:])
 
@@ -887,6 +974,9 @@ class LEAFInfo():
         os.system(debug_cmd)
 
     def get_image(self):
+        """
+        Acquires the evidence that was extracted and creates an ISO image.
+        """
         print(f"Acquiring '{self.evidence_dir}'...")
         os.system(f"tree -a '{self.evidence_dir}'")
         print(f"Writing data to '{self.img_path}'")
@@ -927,13 +1017,14 @@ class LEAFInfo():
                     f"Save raw?\t\t{self.raw}\n\t" \
                     f"User(s):\t\t{self.users_list}\n\t" \
                     f"Categories:\t\t{self.cats}\n\t" \
-                    f"Yara Scanning Enabled:\t{self.yara_scan_bool}"
+                    f"Yara Scanning Enabled:\t{self.yara_scan_bool}\n\t" \
+                    f"Verbose:\t\t{self.verbose}"
         if self.verbose:
             out = out + f"\n\t" \
                         f"Yara Files:\t\t{self.yara_files}\n\t" \
-                        f"Verbose:\t\t{self.verbose}\n\t" \
-                        f"Get files by ownership: {len(self.get_ownership) > 0}\n\t" \
-                        f"'Ownership' Location(s): {self.get_ownership}\n\t" \
+                        f"Yara Destinations:\t{self.yara_destinations}\n\t" \
+                        f"Get files by ownership: {len(self.get_file_by_owner) > 0}\n\t" \
+                        f"Files by ownership:\t{self.get_file_by_owner}\n\t" \
                         f"Protected Locations:\t{self.leaf_paths}\n\t" \
                         f"ISO Hash:\t\t{self.iso_hash}"
 
@@ -960,11 +1051,23 @@ def main():
 
     # Gets the the argparse values
     LEAFObj = LEAFInfo()
-    LEAFObj.get_params()
+    input_parameters = LEAFObj.get_params()
+    # Ensure that the program is run in root
+    try:
+        if os.getuid() != 0:
+            raise RootNotDetected
+    except RootNotDetected as e:
+        print("Error:", e)
+        exit()
+    LEAFObj.compile_params(input_parameters)
     print(LEAFObj)
 
     # Initialize a Log File object
     LogFile = Log(save_loc=LEAFObj.output_dir)
+
+    # Append yara outputs to the targets_file before cloning
+    if LEAFObj.yara_scan_bool:
+        LEAFObj.run_yara(LogFile)
 
     ### Start Clone/Copy Operations
 
@@ -983,7 +1086,9 @@ def main():
     print("Saving acquisition log...")
     LogFile.write_to_file()
     print("Saving error log...")
-    LogFile.write_to_file(log_type="Err")
+    LogFile.write_to_file(log_type="Error")
+    print("Saving yara log...")
+    LogFile.write_to_file(log_type="Yara")
 
     # Trailer
     print()

@@ -102,7 +102,10 @@ $USERHOME/.viminfo
 /etc/crontab/
 /var/log/xferlog
 /var/log/pureftp.log
-/etc/cron*
+/etc/cron.d/
+/etc/cron.daily/
+/etc/cron.monthly/
+/etc/cron.weekly/
 /var/spool/atjobs
 /etc/anacron
 # END SERVICES
